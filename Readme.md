@@ -57,86 +57,90 @@ CREATE DATABASE yout_db_name;
 
 ```
 ### 4.2. Database Schema
+
+Schema Diagram:- https://res.cloudinary.com/dsdksm8pj/image/upload/v1738074071/pcomwb2wfln4de4mstdo.png
+
 Below is the SQL schema to create the required tables for users, videos, and other necessary data. Run these SQL statements to create the necessary tables:
 
 ```sql
 -- Create "user" table
-CREATE TABLE IF NOT EXISTS "user" (
-    "id" serial PRIMARY KEY,
-    "fullName" varchar(255) NOT NULL,
-    "username" varchar(255) NOT NULL UNIQUE,
-    "email" varchar(255) NOT NULL UNIQUE,
-    "password" text NOT NULL,
-    "avatar" text,
-    "coverImage" text,
-    "isChannel" boolean NOT NULL DEFAULT false,
-    "refreshToken" text DEFAULT null,
-    "createdAt" timestamptz DEFAULT now(),
-    "updatedAt" timestamptz DEFAULT now()
+-- Create "users" table
+CREATE TABLE IF NOT EXISTS users (
+    id serial PRIMARY KEY,
+    fullname varchar(255) NOT NULL,
+    username varchar(255) NOT NULL UNIQUE,
+    email varchar(255) NOT NULL UNIQUE,
+    password text NOT NULL,
+    avatar text,
+    coverimage text,
+    ischannel boolean NOT NULL DEFAULT false,
+    refreshtoken text DEFAULT null,
+    createdat timestamptz DEFAULT now(),
+    updatedat timestamptz DEFAULT now()
 );
 
 -- Create "video" table
-CREATE TABLE IF NOT EXISTS "video" (
-    "id" serial PRIMARY KEY,
-    "video_url" text NOT NULL,
-    "thumbNailUrl" text,
-    "title" varchar(300) NOT NULL,
-    "description" varchar(500) NOT NULL,
-    "isPublic" boolean NOT NULL DEFAULT false,
-    "user_id" bigint NOT NULL,
-    "created_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "video_fk6" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS video (
+    id serial PRIMARY KEY,
+    video_url text NOT NULL,
+    thumbnailurl text,
+    title varchar(300) NOT NULL,
+    description varchar(500) NOT NULL,
+    ispublic boolean NOT NULL DEFAULT false,
+    user_id bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT video_fk6 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Create "likes" table
-CREATE TABLE IF NOT EXISTS "likes" (
-    "id" serial PRIMARY KEY,
-    "video_id" bigint NOT NULL,
-    "user_id" bigint NOT NULL,
-    CONSTRAINT "likes_fk1" FOREIGN KEY ("video_id") REFERENCES "video"("id") ON DELETE CASCADE,
-    CONSTRAINT "likes_fk2" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS likes (
+    id serial PRIMARY KEY,
+    video_id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    CONSTRAINT likes_fk1 FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE,
+    CONSTRAINT likes_fk2 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Create "subscription" table
-CREATE TABLE IF NOT EXISTS "subscription" (
-    "id" serial PRIMARY KEY,
-    "subscribers_id" bigint NOT NULL,
-    "subscribedTo_id" bigint NOT NULL,
-    CONSTRAINT "subscription_fk1" FOREIGN KEY ("subscribers_id") REFERENCES "user"("id") ON DELETE CASCADE,
-    CONSTRAINT "subscription_fk2" FOREIGN KEY ("subscribedTo_id") REFERENCES "user"("id") ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS subscription (
+    id serial PRIMARY KEY,
+    subscribers_id bigint NOT NULL,
+    subscribedto_id bigint NOT NULL,
+    CONSTRAINT subscription_fk1 FOREIGN KEY (subscribers_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT subscription_fk2 FOREIGN KEY (subscribedto_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Create "comments" table
-CREATE TABLE IF NOT EXISTS "comments" (
-    "id" serial PRIMARY KEY,
-    "user_id" bigint NOT NULL,
-    "video_id" bigint NOT NULL,
-    "created_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "comments_fk1" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE,
-    CONSTRAINT "comments_fk2" FOREIGN KEY ("video_id") REFERENCES "video"("id") ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS comments (
+    id serial PRIMARY KEY,
+    user_id bigint NOT NULL,
+    video_id bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT comments_fk1 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT comments_fk2 FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE
 );
 
--- Create "communityPost" table
-CREATE TABLE IF NOT EXISTS "communityPost" (
-    "id" serial PRIMARY KEY,
-    "post_image_url" text,
-    "description" varchar(255),
-    "isPublic" boolean NOT NULL DEFAULT false,
-    "user_id" bigint NOT NULL,
-    "created_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "communityPost_fk4" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE
+-- Create "communitypost" table
+CREATE TABLE IF NOT EXISTS communitypost (
+    id serial PRIMARY KEY,
+    post_image_url text,
+    description varchar(255),
+    ispublic boolean NOT NULL DEFAULT false,
+    user_id bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT communitypost_fk4 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Create "playlist" table
-CREATE TABLE IF NOT EXISTS "playlist" (
-    "id" serial PRIMARY KEY,
-    "user_id" bigint NOT NULL,
-    "video_id" bigint NOT NULL,
-    CONSTRAINT "playlist_fk1" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE,
-    CONSTRAINT "playlist_fk2" FOREIGN KEY ("video_id") REFERENCES "video"("id") ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS playlist (
+    id serial PRIMARY KEY,
+    user_id bigint NOT NULL,
+    video_id bigint NOT NULL,
+    CONSTRAINT playlist_fk1 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT playlist_fk2 FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE
 );
 
 
