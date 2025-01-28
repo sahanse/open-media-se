@@ -1,0 +1,27 @@
+{
+  "name": "open-media-se",
+  "version": "1.0.0",
+  "description": "Open-source backend for a YouTube-like media platform built with Node.js, Express, and PostgreSQL. Supports video uploading, streaming, user authentication, and media management with a scalable architecture for easy expansion.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon -r dotenv/config src/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sahanse/open-media-se.git"
+  },
+  "keywords": [
+    "open-media-se"
+  ],
+  "author": "sahan shetty",
+  "license": "AGPL-3.0",
+  "bugs": {
+    "url": "https://github.com/sahanse/open-media-se/issues"
+  },
+  "homepage": "https://github.com/sahanse/open-media-se#readme",
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "prettier": "^3.4.2"
+  }
+}
