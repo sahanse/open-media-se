@@ -1,4 +1,4 @@
-# Open-Source Media Backend
+# Open-Source Media Backend (Development in progress)
 
 This is an open-source backend solution for building a media platform like YouTube, designed to handle video uploading, storage, streaming, and user authentication. Built with **Node.js**, **Express**, **PostgreSQL**, and **Cloudinary**, this backend system provides essential features for managing and serving media content at scale.
 ## Key Features
