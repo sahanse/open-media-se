@@ -7,6 +7,7 @@ import {hashPass} from "../utils/BcryptHandler.js"
 import {db} from "../db/connection/index.js"
 import { createQuery, readQuery, updateQuery, deleteQuery } from "pgcrudify"
 import { generateAccessToken, generateRefreshToken } from "../utils/JwtManager.js"
+import jwt from "jsonwebtoken"
 
 const userRegister= AsyncHandler(async(req, res)=>{
     //access fileld fullname, username, email, password, ischannel -> req.body
@@ -114,13 +115,41 @@ const userRegister= AsyncHandler(async(req, res)=>{
     
     const id=addUser.rows[0];
 
+    //verify user saved successFully in db
     if(!addUser || addUser?.rowCount==0){
         throw new ApiError(500, "Internal server error")
     }
 
-    // const accessToken= await generateAccessToken(id, fullname, username, email)
-    // console.log(accessToken)
+    //generate accesstoken
+    const accessToken= await generateAccessToken(id, fullname, username, email)
+    
+    //generate refreshToken
+    const refreshToken= await generateRefreshToken(id)
 
+    //save refreshtokne into db
+    const saveRefreshToken= await updateQuery(db, "users", {refreshtoken:refreshToken})
+
+    //show error if no refreshtoken
+    if(saveRefreshToken.rowCount===0){
+        throw new ApiError(500, "Internal server error")
+    }
+
+    const options={
+        httpOnly:true,
+        secure:true
+    }
+
+    return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(new ApiResponse(200,{
+        id,
+        fullname,
+        username,
+        email
+    }, "user registered successfully" ))
+    
 })
 
 const userLogin=async(req, res)=>{
