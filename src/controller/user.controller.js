@@ -245,7 +245,7 @@ const userLogout=AsyncHandler(async(req, res)=>{
 
 })
 
-const refreshAccessToken=AsyncHandler(async(req, res)=>{
+const refreshAccessToken=AsyncHandler(async(req, res)=>{   
     //get refreshToken from req.cookies
     //verify refreshToken is available
     //verify user is availabel using info from refreshtoken
@@ -300,6 +300,17 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refrehToken, options)
     .json(new ApiResponse(200, {user, accessToken, refrehToken}, "tokens refreshed successfully"))
+})
+
+//for updating username and 
+const updteInfo=AsyncHandler(async(req, res)=>{
+    //get data from req.body
+    //only allow fullname, avatar, coverImage, isChannel
+    //g
+})
+
+const updateCrutialInfo=AsyncHandler(async(req, res)=>{
+
 })
 
 export {userRegister, userLogin, userLogout, refreshAccessToken}
