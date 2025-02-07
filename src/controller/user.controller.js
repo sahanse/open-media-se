@@ -303,15 +303,19 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
 })
 
 //for updating username and 
-const updteInfo=AsyncHandler(async(req, res)=>{
+const updateInfo=AsyncHandler(async(req, res)=>{
     //get data from req.body
     //only allow fullname, avatar, coverImage, isChannel
-    //g
+    //verify user password
 })
 
-const updateCrutialInfo=AsyncHandler(async(req, res)=>{
+const updateCrutialInfo=AsyncHandler(async(req, res)={
 
 })
 
-export {userRegister, userLogin, userLogout, refreshAccessToken}
+const forgotPass=AsyncHandler(async(req, res)=>{
+
+})
+
+export {userRegister, userLogin, userLogout, refreshAccessToken, updateInfo, updateCrutialInfo, forgotPass}
 
