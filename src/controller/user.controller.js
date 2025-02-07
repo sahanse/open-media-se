@@ -2,7 +2,7 @@ import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {AsyncHandler} from "../utils/AsyncHandler.js"
 import fs from "fs"
-import {uploadOnCloudinary} from "../utils/Cloudinary.js"
+import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/Cloudinary.js"
 import {createQuery, readQuery, updateQuery, deleteQuery} from "pgcrudify"
 import db from "../db/index.js"
 import {hashPass, comparePass} from "../utils/PasswordManager.js"
@@ -126,7 +126,7 @@ const userRegister=AsyncHandler(async(req, res)=>{
 
     const options={
         httpOnly:true,
-        secure:true
+        secure:false
     }
 
     return res
@@ -304,17 +304,104 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
 
 //for updating username and 
 const updateInfo=AsyncHandler(async(req, res)=>{
-    //get data from req.body
-    //only allow fullname, avatar, coverImage, isChannel
-    //verify user password
+    //acces info from req.body
+    const {fullname,isChannel, email, username, password, id}=req.body;
+
+    //accessImages
+    const avatarLocalPath= req.files?.avatar?.[0].path;
+   
+    const coverImageLocalPath= req.files?.coverImage?.[0].path;
+
+    //get user details from req.user
+    const user=req.user;
+
+    if(!user) throw new ApiError(400, "unauthorized access")
+
+    //verify atleast one info is available
+    if(!fullname && !isChannel && !avatarLocalPath && !coverImageLocalPath) throw new ApiError(400, "at least one field is required")
+   
+    //check the field has data in it
+    if([fullname, avatarLocalPath, coverImageLocalPath].some((field)=> field?.trim()==="")) throw new ApiError("minimun one field is required with valid data")
+    
+    //make sure it doesent proceed with crutial info like username, email, password
+    if(password || email || password || username || id) throw new ApiError(400, "Verification required to update crutial info")
+    
+    const data=req.body;
+    const userId=user.id
+
+    
+    let avatarData=null;
+    if(avatarLocalPath){
+        
+        const savedAvatar = await readQuery(db, "users", ["avatar"], {id:userId});
+        
+        if(savedAvatar.rowCount===0) throw new ApiError(400, "internal server error")
+
+        const deleteSavedAvatar= await updateQuery(db, "users", {avatar:null}, {id:userId})
+        
+        if(deleteSavedAvatar.rowCount===0) throw new ApiError(400, "internal serevr error")
+
+        const deleteAvatarCloudinary = await deleteFromCloudinary(savedAvatar.rows[0].avatar)
+
+        if(!deleteAvatarCloudinary) throw new ApiError(400, "internal server error")
+        
+        const uploadAvatarCloudinary= await uploadOnCloudinary(avatarLocalPath);
+
+        if(!uploadAvatarCloudinary) throw new ApiError(400, "internal server error")
+
+        const updateAvatar= await updateQuery(db, "users", {avatar:uploadAvatarCloudinary.url}, {id:userId},["avatar"])
+    
+        if(updateAvatar.rowCount===0) throw new ApiError(400, "internal server error")
+        avatarData={avatar:updateAvatar.rows[0].avatar}
+    }
+
+    let coverData=null;
+    if(coverImageLocalPath){
+       
+        const savedCover = await readQuery(db, "users", ["coverimage"], {id:userId});
+
+        if(savedCover.rowCount===0) throw new ApiError(400, "internal server error")
+
+        const deleteSavedCover= await updateQuery(db, "users", {coverimage:null}, {id:userId})
+
+        if(deleteSavedCover.rowCount===0) throw new ApiError(400, "internal serevr error")
+
+        const deleteCoverCloudinary = await deleteFromCloudinary(savedCover.rows[0].coverimage)
+
+        if(!deleteCoverCloudinary) throw new ApiError(400, "internal server error")
+        
+        const uploadCoverCloudinary= await uploadOnCloudinary(coverImageLocalPath);
+
+        if(!uploadCoverCloudinary) throw new ApiError(400, "internal server error")
+
+        const updateCover= await updateQuery(db, "users", {coverimage:uploadCoverCloudinary.url}, {id:userId},["coverimage"])
+         
+        if(updateCover.rowCount===0) throw new ApiError(400, "internal server error")
+         
+        coverData={coverImage:updateCover.rows[0].coverimage}
+        }
+
+    const dataKeys=Object.keys(data);
+    let updatedData=null;
+    if(Object.keys(data).length>=1){
+        const updateData= await updateQuery(db, "users", data, {id:userId}, dataKeys)
+        if(updateData.rowCount==0) throw new ApiError(400, "error while updating data")
+        updatedData=updateData.rows[0]  
+    }
+    
+    return res
+    .status(200)
+    .json(new ApiResponse(200, {updatedAvatar: avatarData? avatarData:null, updatedCover: coverData ? coverData:null, updatedUser:updatedData? updatedData:null}, "updated successfully"))
 })
 
-const updateCrutialInfo=AsyncHandler(async(req, res)={
-
+const updateCrutialInfo=AsyncHandler(async(req, res)=>{
+    //get data from req.body
+    //only allow email, username, password (password verification required)
 })
 
 const forgotPass=AsyncHandler(async(req, res)=>{
-
+    //get data from req.body
+    //only if user has forgot the password and need to reset (verify by otp email)
 })
 
 export {userRegister, userLogin, userLogout, refreshAccessToken, updateInfo, updateCrutialInfo, forgotPass}
