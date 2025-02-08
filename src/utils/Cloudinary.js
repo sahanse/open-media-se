@@ -30,6 +30,7 @@ const uploadOnCloudinary = async (localFilePath) => {
 }
 
 const deleteFromCloudinary = async (filePath) => {
+    console.log(filePath)
     const extractPublicId = (imageUrl) => {
         const parts = imageUrl.split('/');
         

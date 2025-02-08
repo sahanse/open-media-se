@@ -10,16 +10,6 @@ import { generateAccessToken, generateRefreshToken } from "../utils/JwtManager.j
 import jwt from "jsonwebtoken"
 
 const userRegister=AsyncHandler(async(req, res)=>{
-    //get info from req.body
-    //access avatar and coverImage from req.files
-    //check if all info are available
-    //if no all info remove images from localstorage
-    //chech if user already exists if exists remove image from localstorage
-    //check which image are available and upload available images on cloudinary
-    //hash the password
-    //store the user info in db 
-    //generate access and refreshToken save refreshToken in db
-    //send access and refreshToken in response with cookies
 
     //access user info from req.body
     const {fullname, username, email, password, ischannel}=req.body;
@@ -137,12 +127,6 @@ const userRegister=AsyncHandler(async(req, res)=>{
 })
 
 const userLogin=AsyncHandler(async(req, res)=>{
-    //verify all required datas are available
-    //check if user already exists if exists then continue
-    //check if user password is same
-    //if same the generate new access and refreshtoken
-    //save new refreshtoken in db
-    //send accesstoken and refreshtoken in cookie
 
     //verify all required datas are available
     if(!req.body.username && !req.body.email){
@@ -217,9 +201,7 @@ const userLogin=AsyncHandler(async(req, res)=>{
 })
 
 const userLogout=AsyncHandler(async(req, res)=>{
-    //get user from req.user
-    //remove refreshToken from db
-    //remove accesstoken and refreshtoken from browser
+ 
     const user=req.user;
 
     if(!user){
@@ -246,12 +228,6 @@ const userLogout=AsyncHandler(async(req, res)=>{
 })
 
 const refreshAccessToken=AsyncHandler(async(req, res)=>{   
-    //get refreshToken from req.cookies
-    //verify refreshToken is available
-    //verify user is availabel using info from refreshtoken
-    //if yes generate new accesstoken and refreshToken
-    //save new refrehtoken in db
-    //save new accesstoken and refrehtoken in browser
 
     //get access token from req.cookies
     const refreshTokenCookie = req.cookies?.refreshToken;
@@ -302,14 +278,13 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
     .json(new ApiResponse(200, {user, accessToken, refrehToken}, "tokens refreshed successfully"))
 })
 
-//for updating username and 
+//for updating fullname, ischannel, avatar, coverimage
 const updateInfo=AsyncHandler(async(req, res)=>{
     //acces info from req.body
     const {fullname,isChannel, email, username, password, id}=req.body;
-
+    
     //accessImages
     const avatarLocalPath= req.files?.avatar?.[0].path;
-   
     const coverImageLocalPath= req.files?.coverImage?.[0].path;
 
     //get user details from req.user
@@ -329,69 +304,118 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     const data=req.body;
     const userId=user.id
 
-    
-    let avatarData=null;
-    if(avatarLocalPath){
-        
-        const savedAvatar = await readQuery(db, "users", ["avatar"], {id:userId});
-        
-        if(savedAvatar.rowCount===0) throw new ApiError(400, "internal server error")
-
-        const deleteSavedAvatar= await updateQuery(db, "users", {avatar:null}, {id:userId})
-        
-        if(deleteSavedAvatar.rowCount===0) throw new ApiError(400, "internal serevr error")
-
-        const deleteAvatarCloudinary = await deleteFromCloudinary(savedAvatar.rows[0].avatar)
-
-        if(!deleteAvatarCloudinary) throw new ApiError(400, "internal server error")
-        
-        const uploadAvatarCloudinary= await uploadOnCloudinary(avatarLocalPath);
-
-        if(!uploadAvatarCloudinary) throw new ApiError(400, "internal server error")
-
-        const updateAvatar= await updateQuery(db, "users", {avatar:uploadAvatarCloudinary.url}, {id:userId},["avatar"])
-    
-        if(updateAvatar.rowCount===0) throw new ApiError(400, "internal server error")
-        avatarData={avatar:updateAvatar.rows[0].avatar}
-    }
-
-    let coverData=null;
-    if(coverImageLocalPath){
-       
-        const savedCover = await readQuery(db, "users", ["coverimage"], {id:userId});
-
-        if(savedCover.rowCount===0) throw new ApiError(400, "internal server error")
-
-        const deleteSavedCover= await updateQuery(db, "users", {coverimage:null}, {id:userId})
-
-        if(deleteSavedCover.rowCount===0) throw new ApiError(400, "internal serevr error")
-
-        const deleteCoverCloudinary = await deleteFromCloudinary(savedCover.rows[0].coverimage)
-
-        if(!deleteCoverCloudinary) throw new ApiError(400, "internal server error")
-        
-        const uploadCoverCloudinary= await uploadOnCloudinary(coverImageLocalPath);
-
-        if(!uploadCoverCloudinary) throw new ApiError(400, "internal server error")
-
-        const updateCover= await updateQuery(db, "users", {coverimage:uploadCoverCloudinary.url}, {id:userId},["coverimage"])
-         
-        if(updateCover.rowCount===0) throw new ApiError(400, "internal server error")
-         
-        coverData={coverImage:updateCover.rows[0].coverimage}
+    if(avatarLocalPath || coverImageLocalPath){
+        let imageObj=null;
+        if(avatarLocalPath && coverImageLocalPath){
+            imageObj={
+                avatar:avatarLocalPath,
+                coverimage:coverImageLocalPath
+            }
+        }else if(avatarLocalPath){
+            imageObj={
+                avatar:avatarLocalPath,
+            }
+        }else if(coverImageLocalPath){
+            imageObj={
+                coverimage:coverImageLocalPath
+            }
         }
 
-    const dataKeys=Object.keys(data);
-    let updatedData=null;
-    if(Object.keys(data).length>=1){
-        const updateData= await updateQuery(db, "users", data, {id:userId}, dataKeys)
-        if(updateData.rowCount==0) throw new ApiError(400, "error while updating data")
-        updatedData=updateData.rows[0]  
-    }
+        for(let val in imageObj){
+          const savedImage = await readQuery(db, "users", [val], {id:userId});
+          
+          if(savedImage.rowCount===0) throw new ApiError(400, "internal server error")
+
+          const savedImageObj = savedImage.rows[0];
+
+          const savedImageLink=savedImageObj[val];
+          
+          const deleteSavedImage = await updateQuery(db, "users", {val:null}, {id:userId})
+          console.log(deleteSavedImage)
+        }
+       
+        // if(deleteSavedCover.rowCount===0) throw new ApiError(400, "internal serevr error")
+
+        // const deleteCoverCloudinary = await deleteFromCloudinary(savedCover.rows[0].coverimage)
+
+        // if(!deleteCoverCloudinary) throw new ApiError(400, "internal server error")
+        
+        // const uploadCoverCloudinary= await uploadOnCloudinary(coverImageLocalPath);
+
+        // if(!uploadCoverCloudinary) throw new ApiError(400, "internal server error")
+
+        // const updateCover= await updateQuery(db, "users", {coverimage:uploadCoverCloudinary.url}, {id:userId},["coverimage"])
+         
+        // if(updateCover.rowCount===0) throw new ApiError(400, "internal server error")
+         
+        // coverData={coverImage:updateCover.rows[0].coverimage}
+
+        }
+
+    //----------------------------------------------------------
     
-    return res
-    .status(200)
-    .json(new ApiResponse(200, {updatedAvatar: avatarData? avatarData:null, updatedCover: coverData ? coverData:null, updatedUser:updatedData? updatedData:null}, "updated successfully"))
+    // let avatarData=null;
+    // if(avatarLocalPath){
+        
+    //     const savedAvatar = await readQuery(db, "users", ["avatar"], {id:userId});
+        
+    //     if(savedAvatar.rowCount===0) throw new ApiError(400, "internal server error")
+
+    //     const deleteSavedAvatar= await updateQuery(db, "users", {avatar:null}, {id:userId})
+        
+    //     if(deleteSavedAvatar.rowCount===0) throw new ApiError(400, "internal serevr error")
+
+    //     const deleteAvatarCloudinary = await deleteFromCloudinary(savedAvatar.rows[0].avatar)
+
+    //     if(!deleteAvatarCloudinary) throw new ApiError(400, "internal server error")
+        
+    //     const uploadAvatarCloudinary= await uploadOnCloudinary(avatarLocalPath);
+
+    //     if(!uploadAvatarCloudinary) throw new ApiError(400, "internal server error")
+
+    //     const updateAvatar= await updateQuery(db, "users", {avatar:uploadAvatarCloudinary.url}, {id:userId},["avatar"])
+    
+    //     if(updateAvatar.rowCount===0) throw new ApiError(400, "internal server error")
+    //     avatarData={avatar:updateAvatar.rows[0].avatar}
+    // }
+
+    // let coverData=null;
+    // if(coverImageLocalPath){
+       
+    //     const savedCover = await readQuery(db, "users", ["coverimage"], {id:userId});
+
+    //     if(savedCover.rowCount===0) throw new ApiError(400, "internal server error")
+
+    //     const deleteSavedCover= await updateQuery(db, "users", {coverimage:null}, {id:userId})
+
+    //     if(deleteSavedCover.rowCount===0) throw new ApiError(400, "internal serevr error")
+
+    //     const deleteCoverCloudinary = await deleteFromCloudinary(savedCover.rows[0].coverimage)
+
+    //     if(!deleteCoverCloudinary) throw new ApiError(400, "internal server error")
+        
+    //     const uploadCoverCloudinary= await uploadOnCloudinary(coverImageLocalPath);
+
+    //     if(!uploadCoverCloudinary) throw new ApiError(400, "internal server error")
+
+    //     const updateCover= await updateQuery(db, "users", {coverimage:uploadCoverCloudinary.url}, {id:userId},["coverimage"])
+         
+    //     if(updateCover.rowCount===0) throw new ApiError(400, "internal server error")
+         
+    //     coverData={coverImage:updateCover.rows[0].coverimage}
+    //     }
+
+    // const dataKeys=Object.keys(data);
+    // let updatedData=null;
+    // if(Object.keys(data).length>=1){
+    //     const updateData= await updateQuery(db, "users", data, {id:userId}, dataKeys)
+    //     if(updateData.rowCount==0) throw new ApiError(400, "error while updating data")
+    //     updatedData=updateData.rows[0]  
+    // }
+    
+    // return res
+    // .status(200)
+    // .json(new ApiResponse(200, {updatedAvatar: avatarData? avatarData:null, updatedCover: coverData ? coverData:null, updatedUser:updatedData? updatedData:null}, "updated successfully"))
 })
 
 const updateCrutialInfo=AsyncHandler(async(req, res)=>{
