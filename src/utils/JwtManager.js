@@ -12,4 +12,10 @@ const generateRefreshToken=(id)=>{
     })
 }
 
-export {generateAccessToken, generateRefreshToken}
+const generateOtpToken=(data)=>{
+    return jwt.sign(data, process.env.OTP_TOKEN_SECRET, {
+        expiresIn:process.env.OTP_TOKEN_EXPIRY
+    })
+}
+
+export {generateAccessToken, generateRefreshToken, generateOtpToken}

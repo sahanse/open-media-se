@@ -6,8 +6,9 @@ import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/Cloudinary.js"
 import {createQuery, readQuery, updateQuery, deleteQuery} from "pgcrudify"
 import db from "../db/index.js"
 import {hashPass, comparePass} from "../utils/PasswordManager.js"
-import { generateAccessToken, generateRefreshToken } from "../utils/JwtManager.js"
+import { generateAccessToken, generateRefreshToken, generateOtpToken} from "../utils/JwtManager.js"
 import jwt from "jsonwebtoken"
+import crypto from "crypto"
 
 const userRegister=AsyncHandler(async(req, res)=>{
 
@@ -201,11 +202,11 @@ const userLogin=AsyncHandler(async(req, res)=>{
 })
 
 const userLogout=AsyncHandler(async(req, res)=>{
- 
+    
     const user=req.user;
 
     if(!user){
-        throw new ApiError(400, "something went wrong")
+        throw new ApiError(400, "unauthprized access")
     }
 
     const id=user.id;
@@ -219,6 +220,7 @@ const userLogout=AsyncHandler(async(req, res)=>{
         httpOnly:true,
         secure:false
     }
+
     return res
     .status(200)
     .clearCookie("accessToken",options)
@@ -280,6 +282,22 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
 
 //for updating fullname, ischannel, avatar, coverimage
 const updateInfo=AsyncHandler(async(req, res)=>{
+
+    //make sure req.user is available
+    if(!req.user) throw new ApiError(400, "unauthorized access")
+    //make sure req.body is not empty
+    const bodyKeys=Object.keys(req.body)
+    if(bodyKeys.length===0) throw new ApiError(400, "Empty object not allowed")
+
+    //make sure only fullname, isChannel,avatar,coverImage  are allowed and they are not empty
+    for(let val in req.body){
+        if(val !=="fullname" && val !=="isChannel" && val !=="avatar" && val !=="coverImage"){
+            throw new ApiError(400, `Invalid field ${val}`)
+        }else if(req.body[val].trim()===""){
+            throw new ApiError(400, `empty field at ${val}`)
+        }
+    }
+
     //acces info from req.body
     const {fullname,isChannel, email, username, password, id}=req.body;
     
@@ -287,25 +305,11 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     const avatarLocalPath= req.files?.avatar?.[0].path;
     const coverImageLocalPath= req.files?.coverImage?.[0].path;
 
-    //get user details from req.user
-    const user=req.user;
-
-    if(!user) throw new ApiError(400, "unauthorized access")
-
-    //verify atleast one info is available
-    if(!fullname && !isChannel && !avatarLocalPath && !coverImageLocalPath) throw new ApiError(400, "at least one field is required")
-   
-    //check the field has data in it
-    if([fullname, avatarLocalPath, coverImageLocalPath].some((field)=> field?.trim()==="")) throw new ApiError("minimun one field is required with valid data")
-    
-    //make sure it doesent proceed with crutial info like username, email, password
-    if(password || email || password || username || id) throw new ApiError(400, "Verification required to update crutial info")
-    
     const data=req.body;
-    const userId=user.id
+    const userId=req.user.id
 
     let updatedDataArray=[];
-    
+
     if(avatarLocalPath || coverImageLocalPath){
         let imageObj=null;
         if(avatarLocalPath && coverImageLocalPath){
@@ -367,15 +371,175 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     .json(new ApiResponse(200, {updatedDataArray}, "updated successfully"))
 })
 
-const updateCrutialInfo=AsyncHandler(async(req, res)=>{
-    //get data from req.body
-    //only allow email, username, password (password verification required)
+const updateSensitive=AsyncHandler(async(req, res)=>{
+
+    //make sure req.user is available
+    if(!req.user) throw new ApiError(400, "unauthorized access")
+    //make sure req.body is not empty
+    const bodyKeys=Object.keys(req.body)
+    if(bodyKeys.length===0) throw new ApiError(400, "Empty object not allowed")
+
+    //make sure user is providing password for verification
+    if(!req.body.verifyPassword) throw new ApiError(400, "please provide password to continue with verification")
+
+    //make sure only username, email,password are allowed and they are not empty
+    for(let val in req.body){
+        if(val !=="username" && val !=="email" && val !=="password" && val !== "verifyPassword"){
+            throw new ApiError(400, `field not allowed ${val}`)
+        }else if(req.body[val].trim()===""){
+            throw new ApiError(400, `empty field at ${val}`)
+        }
+    }
+
+    //user id from cookie
+    const id=req.user.id;
+
+    //compare password provided by user is same
+    const getstoredPassword = await readQuery(db,"users",["password"],{id});
+    const storedPassword=getstoredPassword.rows[0].password;
+    const userPassword=req.body.verifyPassword;
+
+    const comparePassword = await comparePass(userPassword, storedPassword);
+
+    if(!comparePassword) throw new ApiError(400, "Wrong password")
+
+    const updatedData = {}
+    for(let val in req.body){
+        if(val==="verifyPassword"){
+        }else if(val==="password"){
+            const hashPassword = await hashPass(req.body[val]);
+            const updatePass = await updateQuery(db, "users", {password:hashPassword},{id});
+            if(updatePass.rowCount===0) throw new ApiError(500, "internal server error")
+            updatedData.password="success"
+        }else{
+             const updateFields = await updateQuery(db, "users", {[val]:req.body[val]}, {id}, [val]);
+             if(updateFields.rowCount===0) throw new ApiError(500, "internal server error")
+             updatedData[val]=updateFields.rows[0][val] 
+        }
+
+    }
+    
+    return res
+    .status(200)
+    .json(new ApiResponse(200, updatedData, "data updated successFully"))
 })
 
-const forgotPass=AsyncHandler(async(req, res)=>{
-    //get data from req.body
-    //only if user has forgot the password and need to reset (verify by otp email)
+const generateOtp = AsyncHandler(async(req, res)=>{
+
+    //make sure req.user is available
+    if(!req.user) throw new ApiError(400, "unauthorized access")
+        
+    //
+     //get user id from req.user   
+    const id=req.user.id;
+
+    //generate otp
+    const generateOtp = await crypto.randomInt(10000, 99999);
+    const otp = hashPass(generateOtp)
+    //delet the existing otp
+    const deleteOtp = await deleteQuery(db, "otp", {user_id:id});
+    
+    //generate time
+    const created_at = new Date();
+    const expiry=new Date(created_at.getTime() + 3 * 60 * 1000);
+    
+    //save otp into databse
+    const saveOtp = await createQuery(db, "otp", {user_id:id, otp, used:false, created_at, expiry}, ["otp"]);
+    
+    if(saveOtp.rowCount===0) throw new ApiError(500, "internal server error")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, saveOtp.rows[0], "otp generated successfully valid till 3 mins"))
 })
 
-export {userRegister, userLogin, userLogout, refreshAccessToken, updateInfo, updateCrutialInfo, forgotPass}
+const verifyOtp = AsyncHandler(async(req, res)=>{
+    
+    //make sure that req.user is available
+    if(!req.user) throw new ApiError(400, "unauthorized access")
+    
+    //make sure req.body is not empty
+    const bodyKeys=Object.keys(req.body);
+    if(bodyKeys.length===0) throw new ApiError(400, "empty object not accepted");
+    if(bodyKeys.length>1) throw new ApiError(400, "only one filed otp is required")
+
+    //make sure that only otp is passed through req.body
+    for(let val in req.body){
+        if(val !== "otp") throw new ApiError(400, "otp is required")
+            const otp= String(req.body[val])
+        if(otp.trim()==="") throw new ApiError(400, "empty otp not accepted")
+    }
+
+    const userOtp = Number(req.body.otp);
+    
+    //user id
+    const userId=req.user.id;
+
+    //get stored otp of user
+    const getStoredOtp = await readQuery(db, "otp", ["*"], {user_id:userId});
+
+    if(getStoredOtp.rowCount===0) throw new ApiError(400, "unauthrized access");
+
+    const storedOtp = getStoredOtp.rows[0].otp;
+    const otpId= getStoredOtp.rows[0].id;
+
+    //make sure otp is not expired
+    const currTime = new Date();
+    const expiry = new Date(getStoredOtp.rows[0].expiry);
+
+    if(expiry < currTime){
+        const deleteOtp = await deleteQuery(db, "otp", {id:otpId});
+
+        if(deleteOtp.rowCount==0) throw new ApiError(400, "internal server error");
+
+        throw new ApiError(400, "Opt expired")
+    }
+
+    //compare both otp are same 
+    const compareOtp = comparePass(userOtp, storedOtp);
+    console.log(com)
+    // if(!compareOtp) throw new ApiError(400, "wrong otp")
+
+    // //generate opt token
+    // const data={
+    //     userId,
+    //     otpId
+    // }
+    // const optToken = await generateOtpToken(data);
+    // console.log(optToken)
+
+    // //cookie options
+    // const options = {
+    //     httpOnly:true,
+    //     secure:false,
+    //     sameSite: "Strict",
+    //     maxAge: 5 * 60 * 1000
+    // }
+
+
+
+})
+
+const resetPass=AsyncHandler(async(req, res)=>{
+    
+    //make sure receive req.user
+    if(!req.user) throw new ApiError(400, "unauthorized access")
+
+    //make sure req.body body is not empty
+    const bodyKeys=Object.keys(req.body);
+    if(bodyKeys.length===0) throw new ApiError(400, "empty object not allowed");
+
+})
+
+export {
+    userRegister, 
+    userLogin, 
+    userLogout, 
+    refreshAccessToken, 
+    updateInfo, 
+    updateSensitive, 
+    resetPass,
+    generateOtp,
+    verifyOtp 
+}
 

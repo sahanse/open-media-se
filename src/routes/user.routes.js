@@ -1,5 +1,15 @@
 import { Router } from "express";
-import {userRegister, userLogin, userLogout, refreshAccessToken, updateInfo} from "../controller/user.controller.js"
+import {
+    userRegister, 
+    userLogin, 
+    userLogout, 
+    refreshAccessToken, 
+    updateInfo, 
+    updateSensitive,
+    generateOtp,
+    verifyOtp
+} from "../controller/user.controller.js"
+
 import {upload} from "../middlewares/multer.middleware.js"
 import {verifyUser} from "../middlewares/auth.middleware.js"
 
@@ -20,7 +30,9 @@ router.route("/login").post(userLogin)
 
 //secured routes
 router.route("/logout").post(verifyUser,userLogout)
+
 router.route("/refresh-token").post(refreshAccessToken)
+
 router.route("/update-info").post(verifyUser,upload.fields([
     {
         name:"avatar",
@@ -32,6 +44,10 @@ router.route("/update-info").post(verifyUser,upload.fields([
     }
 ]),updateInfo)
 
+router.route("/update-sensitive").post(verifyUser,updateSensitive)
+
+router.route("/generate-otp").get(verifyUser,generateOtp)
+
+router.route("/verify-otp").post(verifyUser, verifyOtp)
 
 export default router
-
