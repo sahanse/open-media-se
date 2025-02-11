@@ -429,19 +429,28 @@ const generateOtp = AsyncHandler(async(req, res)=>{
     //make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
         
-    //
-     //get user id from req.user   
+    //get user id from req.user   
     const id=req.user.id;
+
+    //make sure previous otp is expired then generate new otp
+    const checkOtp = await readQuery(db,"otp",["expiry"], {user_id:id});
+    if(checkOtp.rowCount>0){
+        const expiry = new Date(checkOtp.rows[0].expiry);
+        const currTime = new Date();
+        if(currTime < expiry) throw new ApiError(400, "Wait for 2 mins to get another otp")
+    }
 
     //generate otp
     const generateOtp = await crypto.randomInt(10000, 99999);
-    const otp = hashPass(generateOtp)
-    //delet the existing otp
+    const otp = await hashPass(String(generateOtp))
+
+    
+     //delet the existing otp
     const deleteOtp = await deleteQuery(db, "otp", {user_id:id});
     
     //generate time
     const created_at = new Date();
-    const expiry=new Date(created_at.getTime() + 3 * 60 * 1000);
+    const expiry=new Date(created_at.getTime() + 2 * 60 * 1000);
     
     //save otp into databse
     const saveOtp = await createQuery(db, "otp", {user_id:id, otp, used:false, created_at, expiry}, ["otp"]);
@@ -450,7 +459,7 @@ const generateOtp = AsyncHandler(async(req, res)=>{
 
     return res
     .status(200)
-    .json(new ApiResponse(200, saveOtp.rows[0], "otp generated successfully valid till 3 mins"))
+    .json(new ApiResponse(200, {otp:generateOtp}, "otp generated successfully valid till 3 mins"))
 })
 
 const verifyOtp = AsyncHandler(async(req, res)=>{
@@ -470,35 +479,90 @@ const verifyOtp = AsyncHandler(async(req, res)=>{
         if(otp.trim()==="") throw new ApiError(400, "empty otp not accepted")
     }
 
-    const userOtp = Number(req.body.otp);
-    
     //user id
     const userId=req.user.id;
 
-    //get stored otp of user
-    const getStoredOtp = await readQuery(db, "otp", ["*"], {user_id:userId});
+    //make sure user has not exceeded the otp verification failure limit
+    const getFailureCount = await readQuery(db, "failedotpcounts", ["count", "date"], {user_id:userId});
+   
+    const otpFailures = getFailureCount.rows[0].count;
+    const otpFailureDate = getFailureCount.rows[0].date;
 
-    if(getStoredOtp.rowCount===0) throw new ApiError(400, "unauthrized access");
+    const currDate = new Date();
+    const extendedDate = new Date(currDate.getTime() + 24 * 60 * 60 * 1000)
+    if(otpFailures===10 && extendedDate)
+    
+    
 
-    const storedOtp = getStoredOtp.rows[0].otp;
-    const otpId= getStoredOtp.rows[0].id;
+    // //otp given by the user
+    // const userOtp = Number(req.body.otp);
+    
+    // //get stored otp of user
+    // const getStoredOtp = await readQuery(db, "otp", ["*"], {user_id:userId});
 
-    //make sure otp is not expired
-    const currTime = new Date();
-    const expiry = new Date(getStoredOtp.rows[0].expiry);
+    // //thorow error if there is no otp
+    // if(getStoredOtp.rowCount===0) throw new ApiError(400, "Unauthorized access please get an otp to proceed");
 
-    if(expiry < currTime){
-        const deleteOtp = await deleteQuery(db, "otp", {id:otpId});
+    // //throw error if otp is alreday used for verification
+    // if(getStoredOtp.rows[0].used===true) throw new ApiError(400, "Otp already verified successfully")
 
-        if(deleteOtp.rowCount==0) throw new ApiError(400, "internal server error");
+    // const storedOtp = getStoredOtp.rows[0].otp;
+    // const otpId= getStoredOtp.rows[0].id;
+    
 
-        throw new ApiError(400, "Opt expired")
-    }
+    // //make sure otp is not expired
+    // const currTime = new Date();
+    // const expiry = new Date(getStoredOtp.rows[0].expiry);
 
-    //compare both otp are same 
-    const compareOtp = comparePass(userOtp, storedOtp);
-    console.log(com)
-    // if(!compareOtp) throw new ApiError(400, "wrong otp")
+    // if(expiry < currTime){
+    //     const deleteOtp = await deleteQuery(db, "otp", {id:otpId});
+
+    //     if(deleteOtp.rowCount==0) throw new ApiError(400, "internal server error");
+
+    //     //updated the failed otp counts
+    //     const previousFailedCount = await readQuery(db, "failedotpcounts", ["count", "date"], {user_id:userId});
+        
+    //     if(previousFailedCount.rowCount===0){
+    //         const currDate = new Date()
+    //         let count =1;
+    //         const addFailedCount = await createQuery(db, "failedotpcounts", {user_id:userId, date:currDate,count});
+    //         console.log(addFailedCount)
+    //     }else if(previousFailedCount.rowCount>=1){
+    //         let previousUpdatedCount = previousFailedCount.rows[0].count+1;
+    //         const updatedCount = await updateQuery(db, "failedotpcounts", {count:previousUpdatedCount}, {user_id:userId});
+    //         if(updatedCount.rowCount===0) throw new ApiError(500, "internal server error");
+    //     }
+
+    //     throw new ApiError(400, "previous otp expired generate a new one");
+
+    // }
+
+    // //compare both otp are same 
+    // const compareOtp = await comparePass(String(userOtp), storedOtp);
+    
+    // if(!compareOtp){
+        
+    //     //update the failed otp counts
+    //     const previousFailedCount = await readQuery(db, "failedotpcounts", ["count", "date"], {user_id:userId});
+        
+    //     if(previousFailedCount.rowCount===0){
+    //         const currDate = new Date()
+    //         let count =1;
+    //         const addFailedCount = await createQuery(db, "failedotpcounts", {user_id:userId, date:currDate,count});
+    //         console.log(addFailedCount)
+    //     }else if(previousFailedCount.rowCount>=1){
+    //         let previousUpdatedCount = previousFailedCount.rows[0].count+1;
+    //         const updatedCount = await updateQuery(db, "failedotpcounts", {count:previousUpdatedCount}, {user_id:userId});
+    //         if(updatedCount.rowCount===0) throw new ApiError(500, "internal server error");
+    //     }
+
+    //     throw new ApiError(400, "Sorry otp didnt match")
+    // }
+
+    // //update otp as used
+    // const updateOtpAsUsed = await updateQuery(db, "otp", {used:true}, {id:otpId});
+
+    // if(updateOtpAsUsed.rowCount==0) throw new ApiError(500, "internal server error")
 
     // //generate opt token
     // const data={
@@ -506,18 +570,17 @@ const verifyOtp = AsyncHandler(async(req, res)=>{
     //     otpId
     // }
     // const optToken = await generateOtpToken(data);
-    // console.log(optToken)
 
     // //cookie options
     // const options = {
     //     httpOnly:true,
     //     secure:false,
-    //     sameSite: "Strict",
-    //     maxAge: 5 * 60 * 1000
     // }
 
-
-
+    // return res
+    // .status(200)
+    // .cookie("Otp_Token",optToken,options)
+    // .json(new ApiResponse(200, {optToken}, "otp verification successfull"))
 })
 
 const resetPass=AsyncHandler(async(req, res)=>{
