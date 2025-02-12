@@ -11,11 +11,11 @@ import {
 } from "../controller/user.controller.js"
 
 import {upload} from "../middlewares/multer.middleware.js"
-import {verifyUser} from "../middlewares/auth.middleware.js"
+import {verifyUser, verifyAuthRoute} from "../middlewares/auth.middleware.js"
 
 const router= Router()
 
-router.route("/register").post(upload.fields([
+router.route("/register").post(verifyAuthRoute, upload.fields([
     {
         name:"avatar",
         maxCount:1
@@ -26,7 +26,7 @@ router.route("/register").post(upload.fields([
     }
 ]), userRegister)
 
-router.route("/login").post(userLogin)
+router.route("/login").post(verifyAuthRoute,userLogin)
 
 //secured routes
 router.route("/logout").post(verifyUser,userLogout)
