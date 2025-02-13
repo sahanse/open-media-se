@@ -9,6 +9,7 @@ import {hashPass, comparePass} from "../utils/PasswordManager.js"
 import { generateAccessToken, generateRefreshToken, generateOtpToken} from "../utils/JwtManager.js"
 import jwt from "jsonwebtoken"
 import crypto from "crypto"
+import {mailSender} from "../utils/Email.js"
 
 //user register
 const userRegister=AsyncHandler(async(req, res)=>{
@@ -343,7 +344,7 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     const data=req.body;
     const userId=req.user.id
 
-    let updatedDataArray=[];
+    let updatedDataCollection={}
 
     if(avatarLocalPath || coverImageLocalPath){
         let imageObj=null;
@@ -387,28 +388,30 @@ const updateInfo=AsyncHandler(async(req, res)=>{
           if(updateSavedImage.rowCount===0) throw new ApiError(400, "internal server error")
 
           const updatedImageObj=updateSavedImage.rows[0];
-
-          updatedDataArray.push(updatedImageObj)
+          
+          for(let val in updatedImageObj){
+            updatedDataCollection[val]= updatedImageObj[val]
+          }
+          
         }
         }
 
     const dataKeys=Object.keys(data);
-    let updatedData=null;
-    if(Object.keys(data).length>=1){
+    if(dataKeys.length>=1){
         const updateData= await updateQuery(db, "users", data, {id:userId}, dataKeys)
         if(updateData.rowCount==0) throw new ApiError(400, "error while updating data")
-        updatedData=updateData.rows[0];
+        let updatedData=updateData.rows[0];
+        for(let val in updatedData){
+            updatedDataCollection[val]=updatedData[val]
+        }
     }
-    updatedDataArray.push(updatedData);
-
     return res
     .status(200)
-    .json(new ApiResponse(200, {updatedDataArray}, "updated successfully"))
+    .json(new ApiResponse(200, updatedDataCollection, "updated successfully"))
 })
 
 //for updating username, email, password
 const updateSensitive=AsyncHandler(async(req, res)=>{
-
     //make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
     //make sure req.body is not empty
@@ -469,6 +472,14 @@ const generateOtp = AsyncHandler(async(req, res)=>{
     //get user id from req.user   
     const id=req.user.id;
 
+    //make sure previous otp is expired then generate new otp
+    const checkOtp = await readQuery(db,"otp",["expiry", "id"], {user_id:id});
+    if(checkOtp.rowCount>0){
+        const expiry = new Date(checkOtp.rows[0].expiry);
+        const currTime = new Date();
+        if(currTime < expiry) throw new ApiError(400, "Wait for 3 mins to get another otp")
+    }
+
     //make sure user has not exceeded the otp verification failure limit
     let getOtpCount = await readQuery(db, "otpcounts", ["count", "date"], {user_id:id});
    
@@ -488,14 +499,6 @@ const generateOtp = AsyncHandler(async(req, res)=>{
         }
     }
    
-    //make sure previous otp is expired then generate new otp
-    const checkOtp = await readQuery(db,"otp",["expiry"], {user_id:id});
-    if(checkOtp.rowCount>0){
-        const expiry = new Date(checkOtp.rows[0].expiry);
-        const currTime = new Date();
-        if(currTime < expiry) throw new ApiError(400, "Wait for 3 mins to get another otp")
-    }
-
     //generate otp
     const generateOtp = await crypto.randomInt(10000, 99999);
     const otp = await hashPass(String(generateOtp))
@@ -509,7 +512,8 @@ const generateOtp = AsyncHandler(async(req, res)=>{
     const expiry=new Date(created_at.getTime() + 3 * 60 * 1000);
     
     //save otp into databse
-    const saveOtp = await createQuery(db, "otp", {user_id:id, otp, used:false, created_at, expiry}, ["otp"]);
+    const saveOtp = await createQuery(db, "otp", {user_id:id, otp, used:false, created_at, expiry}, ["otp", "id"]);
+    const otpId = saveOtp.rows[0].id;
 
     if(saveOtp.rowCount===0) throw new ApiError(500, "internal server error");
 
@@ -518,7 +522,7 @@ const generateOtp = AsyncHandler(async(req, res)=>{
     if(getOtpCount.rowCount===0){
         //if otp count is 0 add to a new one to it
         const currDate = new Date();
-        const addOtpCount = await createQuery(db, "otpcounts", {user_id:id, date:currDate, count:1});
+        const addOtpCount = await createQuery(db, "otpcounts", {user_id:id, otp_id:otpId, date:currDate, count:1});
         if(addOtpCount.rowCount===0) throw new ApiError(400, "internal server error")
     }else if (getOtpCount.rowCount>0){
          //update the existing otp count
@@ -527,9 +531,31 @@ const generateOtp = AsyncHandler(async(req, res)=>{
          const updateCount = await updateQuery(db, "otpcounts", {count}, {user_id:id})
     }
 
+    const userEmail = req.user.email;
+    const emailSubject = "Your Verification Code from Open Media SE";
+    const text = `Dear ${req.user.fullname},
+
+Your one-time password (OTP) for verification is: ${generateOtp}
+
+Please do not share this code with anyone. It is valid for 3 minutes and is meant to secure your account.
+
+If you did not request this code, please ignore this message.
+
+Thank you for choosing Open Media SE.
+
+Best regards,  
+Open Media SE Team`
+
+    const sendOtp = await mailSender(userEmail, emailSubject, text)
+    if (!sendOtp || !sendOtp.accepted || sendOtp.accepted.length === 0){
+        const deleteSavedOtp = await deleteQuery(db, "otp", {id:otpId})
+        if(deleteSavedOtp.rowCount===0) throw new ApiError(400, "internal server error")
+        throw new ApiError(500, 'OTP could not be sent. Please try again.');
+    } 
+    
     return res
     .status(200)
-    .json(new ApiResponse(200, {otp:generateOtp}, "otp generated successfully valid till 3 mins"))
+    .json(new ApiResponse(200,{},"otp generated successfully valid till 3 mins"))
 })
 
 //verifying the otp
@@ -607,11 +633,7 @@ const verifyOtp = AsyncHandler(async(req, res)=>{
         //update the failed otp counts
         const previousFailedCount = await readQuery(db, "otpcounts", ["count", "date"], {user_id:userId});
         
-        if(previousFailedCount.rowCount===0){
-            const today = new Date();
-            let count =1;
-            const addFailedCount = await createQuery(db, "otpcounts", {user_id:userId, date:today,count});
-        }else if(previousFailedCount.rowCount>=1){
+       if(previousFailedCount.rowCount>=1){
             let previousUpdatedCount = previousFailedCount.rows[0].count+1;
             const updatedCount = await updateQuery(db, "otpcounts", {count:previousUpdatedCount}, {user_id:userId});
             if(updatedCount.rowCount===0) throw new ApiError(500, "internal server error");
