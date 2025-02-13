@@ -63,7 +63,6 @@ Schema Diagram:- https://res.cloudinary.com/dsdksm8pj/image/upload/v1738074071/p
 Below is the SQL schema to create the required tables for users, videos, and other necessary data. Run these SQL statements to create the necessary tables:
 
 ```sql
--- Create "user" table
 -- Create "users" table
 CREATE TABLE IF NOT EXISTS users (
     id serial PRIMARY KEY,
@@ -141,6 +140,28 @@ CREATE TABLE IF NOT EXISTS playlist (
     video_id bigint NOT NULL,
     CONSTRAINT playlist_fk1 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT playlist_fk2 FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE
+);
+
+-- Create "otp" table
+CREATE TABLE IF NOT EXISTS otp (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,  -- Change BIGINT to INTEGER
+    otp VARCHAR NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL,
+    expiry TIMESTAMPTZ NOT NULL,
+    CONSTRAINT otp_fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- create "otpCounts" table
+CREATE TABLE IF NOT EXISTS otpcounts (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    otp_id INTEGER NOT NULL,
+    date TIMESTAMPTZ NOT NULL, 
+    count INTEGER NOT NULL DEFAULT 0, -- Stores the number of OTPs requested
+    CONSTRAINT otpCounts_fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT otpCounts_fk_otp FOREIGN KEY (otp_id) REFERENCES otp(id) ON DELETE CASCADE
 );
 
 
