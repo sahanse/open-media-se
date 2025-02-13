@@ -6,14 +6,14 @@ import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/Cloudinary.js"
 import {createQuery, readQuery, updateQuery, deleteQuery} from "pgcrudify"
 import db from "../db/index.js"
 import {hashPass, comparePass} from "../utils/PasswordManager.js"
-import { generateAccessToken, generateRefreshToken, generateOtpToken} from "../utils/JwtManager.js"
+import { generateAccessToken, generateRefreshToken, generateOtpToken, generateFullAuth} from "../utils/JwtManager.js"
 import jwt from "jsonwebtoken"
 import crypto from "crypto"
 import {mailSender} from "../utils/Email.js"
+import {options} from "../utils/Constants.js"
 
 //user register
 const userRegister=AsyncHandler(async(req, res)=>{
-
     //access images from req.files
     const {avatar, coverImage}=req.files;
 
@@ -125,19 +125,8 @@ const userRegister=AsyncHandler(async(req, res)=>{
     }
 
     //generate access and refreshtoken
-    const accessToken = await generateAccessToken(user);
-    const refreshToken = await generateRefreshToken({id});
-
-    if(!accessToken || !refreshToken){
-        console.log("failed to generate")
-        throw new ApiError(500, "failed to generate tokens")
-    }
-    //save refreshToken in db
-    const saveRefreshTokenDb= await updateQuery(db, "users", {refreshtoken:refreshToken});
-   
-    if(saveRefreshTokenDb.rowCount===0){
-        throw new ApiError(500, "internal server error")
-    }
+    const generateTokens = await generateFullAuth(user, id)
+    const {accessToken,refreshToken}=generateTokens;
 
     const options={
         httpOnly:true,
@@ -157,7 +146,6 @@ const userRegister=AsyncHandler(async(req, res)=>{
 
 //user login
 const userLogin=AsyncHandler(async(req, res)=>{
-
     //if user alreday logged in
    if(req.user){
     return res.
@@ -215,26 +203,10 @@ const userLogin=AsyncHandler(async(req, res)=>{
 
     const id=user.id;
 
-    //generate access and refreshTokens
-    const accessToken= await generateAccessToken(user);
-    const refreshToken= await generateRefreshToken({id})
-
-    if(!accessToken || !refreshToken){
-        throw new ApiError(500, "internal server error")
-    }
+    //generate access and refreshtoken
+    const generateTokens = await generateFullAuth(user, id)
+    const {accessToken,refreshToken}=generateTokens;
     
-    const options={
-        httpOnly:true,
-        secure:false
-    }
-
-    //update refreshToken in userDB
-    const updateRefreshToken= await updateQuery(db, "users", {refreshtoken:refreshToken},{id});
-
-    if(updateRefreshToken.rowCount==0){
-        throw new ApiError(400, "internal server error")
-    }
-
     Object.keys(req.cookies).forEach(cookie => {
         res.clearCookie(cookie);
     });
@@ -257,11 +229,6 @@ const userLogout=AsyncHandler(async(req, res)=>{
    
     if(removeRefreshTokenDB.rowCount===0) throw new ApiError(500, "internal server error")
     
-    const options={
-        httpOnly:true,
-        secure:false
-    }
-
     Object.keys(req.cookies).forEach((cookie)=>{
         res.clearCookie(cookie)
     })
@@ -291,22 +258,10 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
     
     const user=userExist.rows[0]
 
-    //generate new access and refreshtoken
-    const accessToken = await generateAccessToken(user);
-    const refrehToken= await generateRefreshToken({id})
-
-    if(!accessToken || !refrehToken) throw new ApiError(500, "internal server error")
+    //generate access and refreshtoken
+    const generateTokens = await generateFullAuth(user, id)
+    const {accessToken,refreshToken}=generateTokens;
     
-    //update new refreshToken in db
-    const updateRefreshToken = await updateQuery(db, "users", {refreshtoken:refrehToken},{id});
-
-    if(updateRefreshToken.rowCount===0) throw new ApiError(500, "internal server error")
-    
-    const options={
-        httpOnly:true,
-        secure:false
-    }
-
     Object.keys(req.cookies).forEach((cookie)=>{
         res.clearCookie(cookie)
     })
@@ -314,13 +269,12 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
     return res
     .status(200)
     .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refrehToken, options)
-    .json(new ApiResponse(200, {user, accessToken, refrehToken}, "tokens refreshed successfully"))
+    .cookie("refreshToken", refreshToken, options)
+    .json(new ApiResponse(200, {user, accessToken, refreshToken}, "tokens refreshed successfully"))
 })
 
 //for updating fullname, ischannel, avatar, coverimage
 const updateInfo=AsyncHandler(async(req, res)=>{
-
     //make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
 
@@ -398,16 +352,28 @@ const updateInfo=AsyncHandler(async(req, res)=>{
 
     const dataKeys=Object.keys(data);
     if(dataKeys.length>=1){
-        const updateData= await updateQuery(db, "users", data, {id:userId}, dataKeys)
+        const updateData= await updateQuery(db, "users", data, {id:userId},[dataKeys])
         if(updateData.rowCount==0) throw new ApiError(400, "error while updating data")
         let updatedData=updateData.rows[0];
         for(let val in updatedData){
+            req.user[val]=updatedData[val]
             updatedDataCollection[val]=updatedData[val]
         }
     }
+
+    //generate access and refreshtoken
+    const generateTokens = await generateFullAuth(req.user, req.user.id)
+    const {accessToken,refreshToken}=generateTokens;
+    
+    Object.keys(req.cookies).forEach(cookie => {
+        res.clearCookie(cookie);
+    });
+
     return res
     .status(200)
-    .json(new ApiResponse(200, updatedDataCollection, "updated successfully"))
+    .cookie("accessToken", accessToken,options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(new ApiResponse(200, {updatedData:updatedDataCollection, accessToken, refreshToken}, "updated successfully"))
 })
 
 //for updating username, email, password
@@ -453,22 +419,35 @@ const updateSensitive=AsyncHandler(async(req, res)=>{
         }else{
              const updateFields = await updateQuery(db, "users", {[val]:req.body[val]}, {id}, [val]);
              if(updateFields.rowCount===0) throw new ApiError(500, "internal server error")
+             req.user[val]=updateFields.rows[0][val]
              updatedData[val]=updateFields.rows[0][val] 
         }
 
     }
     
-    return res
-    .status(200)
-    .json(new ApiResponse(200, updatedData, "data updated successFully"))
-})
+   //generate access and refreshtoken
+   const generateTokens = await generateFullAuth(req.user, req.user.id)
+   const {accessToken,refreshToken}=generateTokens;
+   
+   Object.keys(req.cookies).forEach(cookie => {
+       res.clearCookie(cookie);
+   });
+
+   console.log(req.user)
+
+   return res
+   .status(200)
+   .cookie("accessToken", accessToken,options)
+   .cookie("refreshToken", refreshToken, options)
+   .json(new ApiResponse(200, {updatedData:updatedData, accessToken, refreshToken}, "updated successfully"))
+});
 
 //generating otp for verification
 const generateOtp = AsyncHandler(async(req, res)=>{
 
-    //make sure req.user is available
+    // make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
-        
+
     //get user id from req.user   
     const id=req.user.id;
 
@@ -546,21 +525,20 @@ Thank you for choosing Open Media SE.
 Best regards,  
 Open Media SE Team`
 
-    const sendOtp = await mailSender(userEmail, emailSubject, text)
-    if (!sendOtp || !sendOtp.accepted || sendOtp.accepted.length === 0){
-        const deleteSavedOtp = await deleteQuery(db, "otp", {id:otpId})
-        if(deleteSavedOtp.rowCount===0) throw new ApiError(400, "internal server error")
-        throw new ApiError(500, 'OTP could not be sent. Please try again.');
-    } 
+    // const sendOtp = await mailSender(userEmail, emailSubject, text)
+    // if (!sendOtp || !sendOtp.accepted || sendOtp.accepted.length === 0){
+    //     const deleteSavedOtp = await deleteQuery(db, "otp", {id:otpId})
+    //     if(deleteSavedOtp.rowCount===0) throw new ApiError(400, "internal server error")
+    //     throw new ApiError(500, 'OTP could not be sent. Please try again.');
+    // } 
     
     return res
     .status(200)
-    .json(new ApiResponse(200,{},"otp generated successfully valid till 3 mins"))
-})
+    .json(new ApiResponse(200,{otp:generateOtp},"otp generated successfully valid till 3 mins"))
+});
 
 //verifying the otp
 const verifyOtp = AsyncHandler(async(req, res)=>{
-    
     //make sure that req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
     
@@ -654,28 +632,28 @@ const verifyOtp = AsyncHandler(async(req, res)=>{
     }
     const optToken = await generateOtpToken(data);
 
-    //cookie options
-    const options = {
-        httpOnly:true,
-        secure:false,
-    }
-
     return res
     .status(200)
     .cookie("Otp_Token",optToken,options)
     .json(new ApiResponse(200, {optToken}, "otp verification successfull"))
-})
+});
 
 //to reset the password if user forgot it
 const resetPass=AsyncHandler(async(req, res)=>{
     
     //make sure receive req.user
-    if(!req.user) throw new ApiError(400, "unauthorized access")
+    if(!req.user) throw new ApiError(400, "unauthorized access");
+    
+    //make sure req.otpAccessVerified
+    if(!req.otpAccessVerified) throw new ApiError(400, "Unauthoried access")
 
     //make sure req.body body is not empty
     const bodyKeys=Object.keys(req.body);
     if(bodyKeys.length===0) throw new ApiError(400, "empty object not allowed");
 
+});
+
+const deleteUser = AsyncHandler(async(req, res)=>{
 })
 
 export {
@@ -684,9 +662,10 @@ export {
     userLogout, 
     refreshAccessToken, 
     updateInfo, 
-    updateSensitive, 
-    resetPass,
+    updateSensitive,
     generateOtp,
-    verifyOtp 
+    verifyOtp,
+    resetPass,
+
 }
 

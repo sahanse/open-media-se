@@ -7,11 +7,12 @@ import {
     updateInfo, 
     updateSensitive,
     generateOtp,
-    verifyOtp
+    verifyOtp,
+    resetPass
 } from "../controller/user.controller.js"
 
 import {upload} from "../middlewares/multer.middleware.js"
-import {verifyUser, verifyAuthRoute} from "../middlewares/auth.middleware.js"
+import {verifyUser, verifyAuthRoute, verifyResetPassRoute} from "../middlewares/auth.middleware.js"
 
 const router= Router()
 
@@ -49,5 +50,7 @@ router.route("/update-sensitive").post(verifyUser,updateSensitive)
 router.route("/generate-otp").get(verifyUser,generateOtp)
 
 router.route("/verify-otp").post(verifyUser, verifyOtp)
+
+router.route("/reset-pass").post(verifyUser, verifyResetPassRoute, resetPass)
 
 export default router
