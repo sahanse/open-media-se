@@ -68,7 +68,26 @@ const userRegister=AsyncHandler(async(req, res)=>{
     }
 
     //access user info from req.body
-    const {fullname, username, email, password, ischannel}=req.body;
+    let  {fullname, username, email, password, ischannel}=req.body;
+
+    //remove all white spaces from username and validate it
+    let validatedUserName="";
+    for(let val of username){
+        if(val !== " "){
+            validatedUserName += val;
+        }
+    }
+    username = validatedUserName;
+
+    //make sure username doesent has any banned special character or emojis
+    const notallowedSymbols = ["`", "~", "#", "^", "*", "(", ")", "{", "}", "[", "]", "/", ";", ":", "|", ",", "+", "="];
+    for(let val of notallowedSymbols){
+        if(username.includes(val)) throw new ApiError(400, `Special character ${val} not allowed`)
+    }
+    // Regular expression to match emojis in username and email
+    const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{1FC00}-\u{1FFFD}]/u;
+    if (emojiRegex.test(username)) throw new ApiError(400, "emojis not username")
+        if (emojiRegex.test(email)) throw new ApiError(400, "emojis not email")
 
     //check weather username exist
     const usernameExist = await readQuery(db, "users", ['username'], {username});
@@ -518,12 +537,12 @@ Thank you for choosing Open Media SE.
 Best regards,  
 Open Media SE Team`
 
-    // const sendOtp = await mailSender(userEmail, emailSubject, text)
-    // if (!sendOtp || !sendOtp.accepted || sendOtp.accepted.length === 0){
-    //     const deleteSavedOtp = await deleteQuery(db, "otp", {id:otpId})
-    //     if(deleteSavedOtp.rowCount===0) throw new ApiError(400, "internal server error")
-    //     throw new ApiError(500, 'OTP could not be sent. Please try again.');
-    // } 
+    const sendOtp = await mailSender(userEmail, emailSubject, text)
+    if (!sendOtp || !sendOtp.accepted || sendOtp.accepted.length === 0){
+        const deleteSavedOtp = await deleteQuery(db, "otp", {id:otpId})
+        if(deleteSavedOtp.rowCount===0) throw new ApiError(400, "internal server error")
+        throw new ApiError(500, 'OTP could not be sent. Please try again.');
+    } 
     
     return res
     .status(200)
