@@ -378,14 +378,16 @@ const updateInfo=AsyncHandler(async(req, res)=>{
 
 //for updating username, email, password
 const updateSensitive=AsyncHandler(async(req, res)=>{
+
     //make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
+
+    //make sure user password is verified
+    if(!req.passwordVerified) throw new ApiError(400, "Unauthorized access")
+
     //make sure req.body is not empty
     const bodyKeys=Object.keys(req.body)
     if(bodyKeys.length===0) throw new ApiError(400, "Empty object not allowed")
-
-    //make sure user is providing password for verification
-    if(!req.body.verifyPassword) throw new ApiError(400, "please provide password to continue with verification")
 
     //make sure only username, email,password are allowed and they are not empty
     for(let val in req.body){
@@ -398,15 +400,6 @@ const updateSensitive=AsyncHandler(async(req, res)=>{
 
     //user id from cookie
     const id=req.user.id;
-
-    //compare password provided by user is same
-    const getstoredPassword = await readQuery(db,"users",["password"],{id});
-    const storedPassword=getstoredPassword.rows[0].password;
-    const userPassword=req.body.verifyPassword;
-
-    const comparePassword = await comparePass(userPassword, storedPassword);
-
-    if(!comparePassword) throw new ApiError(400, "Wrong password")
 
     const updatedData = {}
     for(let val in req.body){
@@ -651,10 +644,52 @@ const resetPass=AsyncHandler(async(req, res)=>{
     const bodyKeys=Object.keys(req.body);
     if(bodyKeys.length===0) throw new ApiError(400, "empty object not allowed");
 
+    ///make sure only password is allowed and they are not empty
+    for(let val in req.body){
+        if(val !=="password"){
+            throw new ApiError(400, `Invalid field ${val}`)
+        }else if(req.body[val].trim()===""){
+            throw new ApiError(400, `empty field at ${val}`)
+        }
+    }
+    const newPassword = req.body.password;
+    const userId = req.otpAccessVerified.userId;
+
+    //hash the password
+    const hashedPass = await hashPass(newPassword)
+
+    //update the user Password
+    const updatePass = await updateQuery(db, "users", {password:hashedPass}, {id:userId});
+    
+    if(updatePass.rowCount === 0) throw new ApiError(400, "internal server error");
+
+    return res
+    .status(200)
+    .clearCookie("Otp_Token", options)
+    .json(new ApiResponse(200, "password reset successfull"))
 });
 
+//required otp verification
 const deleteUser = AsyncHandler(async(req, res)=>{
-})
+
+    //make sure req.user is available
+    if(!req.user) throw new ApiError(400, "Unauthorized access")
+
+    //make sure req.otpAccessVerified
+    if(!req.otpAccessVerified) throw new ApiError(400, "Unauthoried access")
+    
+    //get user id 
+    const id = req.otpAccessVerified.userId;
+
+    //delete the user from db
+    const deleteUser = await deleteQuery(db, "users", {id});
+
+    if(deleteUser.rowCount === 0) throw new ApiError(400, "internal server error");
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Account deleted successfully"))
+});
 
 export {
     userRegister, 
@@ -666,6 +701,6 @@ export {
     generateOtp,
     verifyOtp,
     resetPass,
-
+    deleteUser
 }
 
