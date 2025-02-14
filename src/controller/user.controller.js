@@ -6,76 +6,57 @@ import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/Cloudinary.js"
 import {createQuery, readQuery, updateQuery, deleteQuery} from "pgcrudify"
 import db from "../db/index.js"
 import {hashPass, comparePass} from "../utils/PasswordManager.js"
-import { generateAccessToken, generateRefreshToken, generateOtpToken, generateFullAuth} from "../utils/JwtManager.js"
+import {generateOtpToken, generateFullAuth} from "../utils/JwtManager.js"
 import jwt from "jsonwebtoken"
 import crypto from "crypto"
 import {mailSender} from "../utils/Email.js"
 import {options} from "../utils/Constants.js"
+import {verifyBody} from "../utils/ReqBodyVerifier.js"
 
 //user register
 const userRegister=AsyncHandler(async(req, res)=>{
     //access images from req.files
     const {avatar, coverImage}=req.files;
 
+    //if user already logged in
     if(req.user){
         if(avatar) fs.unlinkSync(avatar[0].path)
         if(coverImage) fs.unlinkSync(coverImage[0].path)
-    
         return res
         .status(200)
         .json(new ApiResponse(200, req.user, "user already logged-in to register logout first"))
-    }         
-    //make sure req.body is not empty
-    const bodyKeys = Object.keys(req.body);
-    if(bodyKeys.length===0) throw new ApiError(400, "Empty object received please provide data")
+    }
     
+    //make sure req.body is fine
+    const requiredFields = ["username", "fullname", "email", "avatar", "coverImage", "ischannel", "password"]
+    const checkReqBody = await verifyBody(req.body, requiredFields, 7);
+   
+    const bodyKeys = Object.keys(req.body);
     //make sure how many fields are accepted in req.body
     const fileKeys = Object.keys(req.files);
     if(fileKeys.length===0){
         if(bodyKeys.length < 7 || bodyKeys.length > 7) throw new ApiError(400, "Please only provide all required fields if no image files are available provide null values")
     }else if(fileKeys.length ===1){
-       if(bodyKeys.length < 6  || bodyKeys.length > 6 ){
-
+        if(bodyKeys.length < 6  || bodyKeys.length > 6 ){
         if(avatar) fs.unlinkSync(avatar[0].path)
         if(coverImage) fs.unlinkSync(coverImage[0].path)
-            
         throw new ApiError(400, "Please only provide all required fields if no image files are available provide null values")
        }
     }else if(fileKeys.length ===2){
-       if(bodyKeys.length < 5 || bodyKeys.length > 5){
-
+        if(bodyKeys.length < 5 || bodyKeys.length > 5){
         if(avatar) fs.unlinkSync(avatar[0].path)
         if(coverImage) fs.unlinkSync(coverImage[0].path)
-              
         throw new ApiError(400, "Please provide all required fields")
        }
     }
-
-   //make sure only required fields are allowed and they are not empty
-    for(let val in req.body){
-        if(
-            val !== "username" && 
-            val !== "fullname" && 
-            val !== "email" && 
-            val !== "avatar" && 
-            val !== "coverImage" && 
-            val !== "ischannel" && 
-            val !== "password"){
-                throw new ApiError(400, `${val} field not allowed`)
-            }else if(req.body[val].trim()===""){
-                throw new ApiError(400, `empty field at ${val}`)
-            }
-    }
-
+    
     //access user info from req.body
     let  {fullname, username, email, password, ischannel}=req.body;
 
     //remove all white spaces from username and validate it
     let validatedUserName="";
     for(let val of username){
-        if(val !== " "){
-            validatedUserName += val;
-        }
+        if(val !== " ") validatedUserName += val;
     }
     username = validatedUserName;
 
@@ -84,10 +65,11 @@ const userRegister=AsyncHandler(async(req, res)=>{
     for(let val of notallowedSymbols){
         if(username.includes(val)) throw new ApiError(400, `Special character ${val} not allowed`)
     }
-    // Regular expression to match emojis in username and email
+
+    // Regular expression to match emojis in username and email 
     const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{1FC00}-\u{1FFFD}]/u;
     if (emojiRegex.test(username)) throw new ApiError(400, "emojis not username")
-        if (emojiRegex.test(email)) throw new ApiError(400, "emojis not email")
+    if (emojiRegex.test(email)) throw new ApiError(400, "emojis not email")
 
     //check weather username exist
     const usernameExist = await readQuery(db, "users", ['username'], {username});
@@ -104,29 +86,19 @@ const userRegister=AsyncHandler(async(req, res)=>{
     const emailExist = await readQuery(db, "users",["email"],{email})
 
     if(emailExist.rowCount===1){
-        console.log("yes email")
-        if(avatar){
-            fs.unlinkSync(avatar.path)
-        }
-
-        if(coverImage){
-            fs.unlinkSync(coverImage.path)
-        }
+        if(avatar) fs.unlinkSync(avatar.path)
+        if(coverImage) fs.unlinkSync(coverImage.path)
         throw new ApiError(400, "email alreday in use provide a new one")
     }
 
     //if avatar available upload on cloudinary
     let avatarCloudinary=null;
-    if(avatar){
-        avatarCloudinary= await uploadOnCloudinary(avatar[0].path)
-    }
-
+    if(avatar) avatarCloudinary= await uploadOnCloudinary(avatar[0].path)
+    
     //if cover image available upload on cloudinary
     let coverImageCloudinary=null;
-    if(coverImage){
-        coverImageCloudinary= await uploadOnCloudinary(coverImage[0].path)
-    }
-
+    if(coverImage) coverImageCloudinary= await uploadOnCloudinary(coverImage[0].path)
+    
     //hash the password
     const hashedPass= await hashPass(password);
 
@@ -147,11 +119,6 @@ const userRegister=AsyncHandler(async(req, res)=>{
     const generateTokens = await generateFullAuth(user, id)
     const {accessToken,refreshToken}=generateTokens;
 
-    const options={
-        httpOnly:true,
-        secure:false
-    }
-
     Object.keys(req.cookies).forEach(cookie => {
         res.clearCookie(cookie);
     });
@@ -171,22 +138,10 @@ const userLogin=AsyncHandler(async(req, res)=>{
     status(200)
     .json(new ApiResponse(200, req.user, "user already logged in"))
    } 
-
-    //make sure req.body is not empty
-    const bodyKeys = Object.keys(req.body);
-    if(bodyKeys.length===0) throw new ApiError(400, "Received empty object Please provide some data")
-
-    //make sure only two data are received in object
-    if(bodyKeys.length !== 2) throw new ApiError(400, "Only two set of data username or email and password is required")
-
-    //make sure only username or email and password is passed through req.body
-   for(let val in req.body){
-    if(val !=="username" && val !=="email" && val !=="password"){
-        throw new ApiError(400, `field not allowed ${val}`)
-    }else if(req.body[val].trim()===""){
-        throw new ApiError(400, `empty field at ${val}`)
-    }
-   }
+   
+    //make sure req.body is fine
+    const requiredFields =["username", "email", "password"]
+    const checkReqBody = await verifyBody(req.body, requiredFields, 2);
 
    //make sure that password is available;
    if(!req.body.password) throw new ApiError(400, "password is required")
@@ -199,20 +154,16 @@ const userLogin=AsyncHandler(async(req, res)=>{
        userExist=await readQuery(db, "users",["id","fullname","username","email","password"], {username:req.body.username})
     }
 
-    if(userExist.rowCount===0){
-        throw new ApiError(400, "user not found")
-    }
-
+    if(userExist.rowCount===0) throw new ApiError(400, "user not found")
+    
     //check for password match
     const savedPass= userExist.rows[0].password
     
     //compare the password
     const passwordMatched= await comparePass(req.body.password, savedPass);
     
-    if(!passwordMatched){
-        throw new ApiError(400, "Wrong password")
-    }
-
+    if(!passwordMatched) throw new ApiError(400, "Wrong password")
+    
     const user={
         id:userExist.rows[0].id,
         fullname:userExist.rows[0].fullname,
@@ -245,7 +196,6 @@ const userLogout=AsyncHandler(async(req, res)=>{
 
     const id=req.user.id;
     const removeRefreshTokenDB= await updateQuery(db, "users", {refreshtoken:null}, {id});
-   
     if(removeRefreshTokenDB.rowCount===0) throw new ApiError(500, "internal server error")
     
     Object.keys(req.cookies).forEach((cookie)=>{
@@ -256,14 +206,12 @@ const userLogout=AsyncHandler(async(req, res)=>{
     .status(200)
     .json(new ApiResponse(200, {}, "user logout successfull"))
 
-})
+});
 
 //refreshing the accesstoken if it expired
 const refreshAccessToken=AsyncHandler(async(req, res)=>{   
-
     //get access token from req.cookies
     const refreshTokenCookie = req.cookies?.refreshToken;
-    
     if(!refreshTokenCookie) throw new ApiError(400, "unauthorized access")
 
     //get user info from refreshtoken
@@ -272,9 +220,7 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
 
     //check user exist
     const userExist= await readQuery(db, "users", ["id", "fullname", "username", "email"], {id});
-    
     if(userExist.rowCount===0) throw new ApiError(400, "unauthorized access")
-    
     const user=userExist.rows[0]
 
     //generate access and refreshtoken
@@ -290,26 +236,17 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
     .json(new ApiResponse(200, {user, accessToken, refreshToken}, "tokens refreshed successfully"))
-})
+});
 
 //for updating fullname, ischannel, avatar, coverimage
 const updateInfo=AsyncHandler(async(req, res)=>{
     //make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
 
-    //make sure req.body is not empty
-    const bodyKeys=Object.keys(req.body)
-    if(bodyKeys.length===0) throw new ApiError(400, "Empty object not allowed")
-
-    //make sure only fullname, isChannel,avatar,coverImage  are allowed and they are not empty
-    for(let val in req.body){
-        if(val !=="fullname" && val !=="isChannel" && val !=="avatar" && val !=="coverImage"){
-            throw new ApiError(400, `Invalid field ${val}`)
-        }else if(req.body[val].trim()===""){
-            throw new ApiError(400, `empty field at ${val}`)
-        }
-    }
-
+    //make sure req.body is fine
+    const requiredFields =["fullname", "isChannel", "avatar", "coverImage"]
+    const checkReqBody = await verifyBody(req.body, requiredFields);
+    
     //accessImages
     const avatarLocalPath= req.files?.avatar?.[0].path;
     const coverImageLocalPath= req.files?.coverImage?.[0].path;
@@ -320,48 +257,33 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     let updatedDataCollection={}
 
     if(avatarLocalPath || coverImageLocalPath){
-        let imageObj=null;
+        let imageObj={};
         if(avatarLocalPath && coverImageLocalPath){
-            imageObj={
-                avatar:avatarLocalPath,
-                coverimage:coverImageLocalPath
-            }
+            imageObj.avatar=avatarLocalPath,
+            imageObj.coverimagecoverImageLocalPath
         }else if(avatarLocalPath){
-            imageObj={
-                avatar:avatarLocalPath,
-            }
-        }else if(coverImageLocalPath){
-            imageObj={
-                coverimage:coverImageLocalPath
-            }
-        }
-
+            imageObj.avatar=avatarLocalPath
+        }else if(coverImageLocalPath) imageObj.coverimage=coverImageLocalPath
+        
         for(let val in imageObj){
-
           const savedImage = await readQuery(db, "users", [val], {id:userId});
-          
           if(savedImage.rowCount===0) throw new ApiError(400, "internal server error")
 
           const savedImageObj = savedImage.rows[0];
-
           const savedImageLink=savedImageObj[val];
 
           if(savedImageLink !== "null"){
             const deleteImageCloudinary = await deleteFromCloudinary(savedImageLink);
-
             if(!deleteImageCloudinary) throw new ApiError(400, "internal server error")
           }
          
           const uploadImageCloudinary= await uploadOnCloudinary(imageObj[val]);
-           
           if(!uploadImageCloudinary) throw new ApiError(400, "internal server error")
 
           const updateSavedImage = await updateQuery(db, "users", {[val]:uploadImageCloudinary.url}, {id:userId},[val])
-         
           if(updateSavedImage.rowCount===0) throw new ApiError(400, "internal server error")
 
           const updatedImageObj=updateSavedImage.rows[0];
-          
           for(let val in updatedImageObj){
             updatedDataCollection[val]= updatedImageObj[val]
           }
@@ -393,7 +315,7 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     .cookie("accessToken", accessToken,options)
     .cookie("refreshToken", refreshToken, options)
     .json(new ApiResponse(200, {updatedData:updatedDataCollection, accessToken, refreshToken}, "updated successfully"))
-})
+});
 
 //for updating username, email, password
 const updateSensitive=AsyncHandler(async(req, res)=>{
@@ -404,18 +326,9 @@ const updateSensitive=AsyncHandler(async(req, res)=>{
     //make sure user password is verified
     if(!req.passwordVerified) throw new ApiError(400, "Unauthorized access")
 
-    //make sure req.body is not empty
-    const bodyKeys=Object.keys(req.body)
-    if(bodyKeys.length===0) throw new ApiError(400, "Empty object not allowed")
-
-    //make sure only username, email,password are allowed and they are not empty
-    for(let val in req.body){
-        if(val !=="username" && val !=="email" && val !=="password" && val !== "verifyPassword"){
-            throw new ApiError(400, `field not allowed ${val}`)
-        }else if(req.body[val].trim()===""){
-            throw new ApiError(400, `empty field at ${val}`)
-        }
-    }
+    //make sure req.body is fine
+    const requiredFields = ["username", "email", "password", "verifyPassword"]
+    const checkReqBody = await verifyBody(req.body, requiredFields);
 
     //user id from cookie
     const id=req.user.id;
@@ -652,25 +565,16 @@ const verifyOtp = AsyncHandler(async(req, res)=>{
 
 //to reset the password if user forgot it
 const resetPass=AsyncHandler(async(req, res)=>{
-    
     //make sure receive req.user
     if(!req.user) throw new ApiError(400, "unauthorized access");
-    
+
     //make sure req.otpAccessVerified
     if(!req.otpAccessVerified) throw new ApiError(400, "Unauthoried access")
 
-    //make sure req.body body is not empty
-    const bodyKeys=Object.keys(req.body);
-    if(bodyKeys.length===0) throw new ApiError(400, "empty object not allowed");
+    //make sure req.body is fine
+    const requiredFields=["password"]
+    const checkReqBody = await verifyBody(req.body, requiredFields, 1);
 
-    ///make sure only password is allowed and they are not empty
-    for(let val in req.body){
-        if(val !=="password"){
-            throw new ApiError(400, `Invalid field ${val}`)
-        }else if(req.body[val].trim()===""){
-            throw new ApiError(400, `empty field at ${val}`)
-        }
-    }
     const newPassword = req.body.password;
     const userId = req.otpAccessVerified.userId;
 
@@ -679,7 +583,6 @@ const resetPass=AsyncHandler(async(req, res)=>{
 
     //update the user Password
     const updatePass = await updateQuery(db, "users", {password:hashedPass}, {id:userId});
-    
     if(updatePass.rowCount === 0) throw new ApiError(400, "internal server error");
 
     return res
@@ -690,7 +593,6 @@ const resetPass=AsyncHandler(async(req, res)=>{
 
 //required otp verification
 const deleteUser = AsyncHandler(async(req, res)=>{
-
     //make sure req.user is available
     if(!req.user) throw new ApiError(400, "Unauthorized access")
 
@@ -702,7 +604,6 @@ const deleteUser = AsyncHandler(async(req, res)=>{
 
     //delete the user from db
     const deleteUser = await deleteQuery(db, "users", {id});
-
     if(deleteUser.rowCount === 0) throw new ApiError(400, "internal server error");
 
     return res
@@ -722,4 +623,3 @@ export {
     resetPass,
     deleteUser
 }
-

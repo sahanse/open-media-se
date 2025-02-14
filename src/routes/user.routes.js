@@ -50,7 +50,6 @@ router.route("/update-sensitive").post(verifyUser,verifyPassword,updateSensitive
 
 router.route("/generate-otp").get(verifyUser,generateOtp)
 
-
 router.route("/verify-otp").post(verifyUser, verifyOtp)
 
 router.route("/reset-pass").post(verifyUser, verifyOtpToken, resetPass)
