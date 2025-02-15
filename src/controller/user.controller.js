@@ -28,28 +28,10 @@ const userRegister=AsyncHandler(async(req, res)=>{
     }
     
     //make sure req.body is fine
-    const requiredFields = ["username", "fullname", "email", "avatar", "coverImage", "ischannel", "password"]
-    const checkReqBody = await verifyBody(req.body, requiredFields, 7);
-   
-    const bodyKeys = Object.keys(req.body);
-    //make sure how many fields are accepted in req.body
-    const fileKeys = Object.keys(req.files);
-    if(fileKeys.length===0){
-        if(bodyKeys.length < 7 || bodyKeys.length > 7) throw new ApiError(400, "Please only provide all required fields if no image files are available provide null values")
-    }else if(fileKeys.length ===1){
-        if(bodyKeys.length < 6  || bodyKeys.length > 6 ){
-        if(avatar) fs.unlinkSync(avatar[0].path)
-        if(coverImage) fs.unlinkSync(coverImage[0].path)
-        throw new ApiError(400, "Please only provide all required fields if no image files are available provide null values")
-       }
-    }else if(fileKeys.length ===2){
-        if(bodyKeys.length < 5 || bodyKeys.length > 5){
-        if(avatar) fs.unlinkSync(avatar[0].path)
-        if(coverImage) fs.unlinkSync(coverImage[0].path)
-        throw new ApiError(400, "Please provide all required fields")
-       }
-    }
-    
+    const requiredFields = ["username", "fullname", "email", "ischannel", "password"]
+    const checkReqBody = await verifyBody(req.body, requiredFields, 5, req.files);
+
+
     //access user info from req.body
     let  {fullname, username, email, password, ischannel}=req.body;
 
@@ -75,10 +57,8 @@ const userRegister=AsyncHandler(async(req, res)=>{
     const usernameExist = await readQuery(db, "users", ['username'], {username});
 
     if(usernameExist.rowCount===1){
-
         if(avatar) fs.unlinkSync(avatar[0].path)
         if(coverImage) fs.unlinkSync(coverImage[0].path)
-
         throw new ApiError(400, "username already in use provide a new one")
     }
 
@@ -103,7 +83,7 @@ const userRegister=AsyncHandler(async(req, res)=>{
     const hashedPass= await hashPass(password);
 
     //save user into databse
-    const addUser = await createQuery(db, "users", {fullname, username, email, password:hashedPass, avatar:avatarCloudinary.url, coverimage:coverImageCloudinary.url, ischannel}, ["id"])
+    const addUser = await createQuery(db, "users", {fullname, username, email, password:hashedPass, avatar:avatarCloudinary?.url || null, coverimage:coverImageCloudinary?.url || null, ischannel}, ["id"])
 
     //extract id of user
     const id=addUser.rows[0].id;
@@ -112,7 +92,9 @@ const userRegister=AsyncHandler(async(req, res)=>{
         id,
         fullname,
         username,
-        email
+        email,
+        avatar:avatarCloudinary?.url || null,
+        coverImage:coverImageCloudinary?.url || null
     }
 
     //generate access and refreshtoken
@@ -244,7 +226,7 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     if(!req.user) throw new ApiError(400, "unauthorized access")
 
     //make sure req.body is fine
-    const requiredFields =["fullname", "isChannel", "avatar", "coverImage"]
+    const requiredFields =["fullname", "isChannel"]
     const checkReqBody = await verifyBody(req.body, requiredFields);
     
     //accessImages
@@ -257,15 +239,13 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     let updatedDataCollection={}
 
     if(avatarLocalPath || coverImageLocalPath){
-        let imageObj={};
-        if(avatarLocalPath && coverImageLocalPath){
-            imageObj.avatar=avatarLocalPath,
-            imageObj.coverimagecoverImageLocalPath
-        }else if(avatarLocalPath){
-            imageObj.avatar=avatarLocalPath
-        }else if(coverImageLocalPath) imageObj.coverimage=coverImageLocalPath
-        
+        let imageObj={
+            avatar:avatarLocalPath || null,
+            coverimage:coverImageLocalPath || null
+        };
+
         for(let val in imageObj){
+        if(imageObj[val] !== null){
           const savedImage = await readQuery(db, "users", [val], {id:userId});
           if(savedImage.rowCount===0) throw new ApiError(400, "internal server error")
 
@@ -289,7 +269,8 @@ const updateInfo=AsyncHandler(async(req, res)=>{
           }
           
         }
-        }
+    }
+}
 
     const dataKeys=Object.keys(data);
     if(dataKeys.length>=1){
@@ -319,7 +300,6 @@ const updateInfo=AsyncHandler(async(req, res)=>{
 
 //for updating username, email, password
 const updateSensitive=AsyncHandler(async(req, res)=>{
-
     //make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
 
@@ -358,8 +338,6 @@ const updateSensitive=AsyncHandler(async(req, res)=>{
        res.clearCookie(cookie);
    });
 
-   console.log(req.user)
-
    return res
    .status(200)
    .cookie("accessToken", accessToken,options)
@@ -369,7 +347,6 @@ const updateSensitive=AsyncHandler(async(req, res)=>{
 
 //generating otp for verification
 const generateOtp = AsyncHandler(async(req, res)=>{
-
     // make sure req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
 
@@ -407,7 +384,6 @@ const generateOtp = AsyncHandler(async(req, res)=>{
     const generateOtp = await crypto.randomInt(10000, 99999);
     const otp = await hashPass(String(generateOtp))
 
-    
      //delet the existing otp
     const deleteOtp = await deleteQuery(db, "otp", {user_id:id});
     
@@ -440,13 +416,9 @@ const generateOtp = AsyncHandler(async(req, res)=>{
     const text = `Dear ${req.user.fullname},
 
 Your one-time password (OTP) for verification is: ${generateOtp}
-
 Please do not share this code with anyone. It is valid for 3 minutes and is meant to secure your account.
-
 If you did not request this code, please ignore this message.
-
 Thank you for choosing Open Media SE.
-
 Best regards,  
 Open Media SE Team`
 
@@ -467,17 +439,9 @@ const verifyOtp = AsyncHandler(async(req, res)=>{
     //make sure that req.user is available
     if(!req.user) throw new ApiError(400, "unauthorized access")
     
-    //make sure req.body is not empty
-    const bodyKeys=Object.keys(req.body);
-    if(bodyKeys.length===0) throw new ApiError(400, "empty object not accepted");
-    if(bodyKeys.length>1) throw new ApiError(400, "only one filed otp is required")
-
-    //make sure that only otp is passed through req.body
-    for(let val in req.body){
-        if(val !== "otp") throw new ApiError(400, "otp is required")
-            const otp= String(req.body[val])
-        if(otp.trim()==="") throw new ApiError(400, "empty otp not accepted")
-    }
+    //make sure req.body is fine
+    const requiredFields=["otp"];
+    const checkReqBody = await verifyBody(req.body, requiredFields, 1);
 
     //user id
     const userId=req.user.id;
@@ -497,7 +461,6 @@ const verifyOtp = AsyncHandler(async(req, res)=>{
     const storedOtp = getStoredOtp.rows[0].otp;
     const otpId= getStoredOtp.rows[0].id;
     
-
     //make sure otp is not expired
     const currDate = new Date()
     const expiry = new Date(getStoredOtp.rows[0].expiry);

@@ -14,21 +14,16 @@ const videoUpload= AsyncHandler(async(req, res)=>{
     //make sure that req.file is available
     if(!req.files) throw new ApiError(400, "Cant continue without video");
 
+    
     //make sure req.body is available
-    if(!req.body) throw new ApiError(400, "please provide data")
-
-    //get user from req.user 
-    const userId = req.user.id;
-
-    //access details from req.body
-    const {title, description, ispublic, category, duration_type, child_safe} = req.body;
-
-    //access image files from req.files
-    const {video, thumbnail} = req.files;
-
+    if(!req.body) throw new ApiError(400, "please provide data");
     //make sure req.body is fine
     const requiredFields = ["title", "description", "ispublic", "category", "duration_type", "child_safe"];
     const checkReqBody = await verifyBody(req.body, requiredFields, 6);
+
+    console.log(req.files)
+    //access details from req.body
+    const {title, description, ispublic, category, duration_type, child_safe} = req.body;
 
 });
 
