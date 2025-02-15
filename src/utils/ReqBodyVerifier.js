@@ -4,7 +4,6 @@ import fs from "fs"
 const verifyBody = async(body, checkData, checkLength=null, files={})=>{
 
     const removeFiles =async()=>{
-
     const filesKeys=Object.keys(files);
     if(filesKeys.includes("avatar")){
         const avatarPath = files.avatar[0].path;
@@ -22,7 +21,6 @@ const verifyBody = async(body, checkData, checkLength=null, files={})=>{
     if(bodyKeys.length===0){
         removeFiles()
         throw new ApiError(400, "please provide data to continue");
-    
 }
 
     //if user has provided check length then chcec by length 
@@ -39,7 +37,7 @@ const verifyBody = async(body, checkData, checkLength=null, files={})=>{
             removeFiles()
             throw new ApiError(400, `Unidentified field ${val}`)
         } 
-        if(body[val].trim() === ""){
+        if(String(body[val]).trim() === ""){
             removeFiles()
             throw new ApiError(400, `Empty fields not allowed Got an empty field at ${val}`)
         } 

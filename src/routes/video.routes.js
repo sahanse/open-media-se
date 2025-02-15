@@ -19,6 +19,6 @@ router.route("/upload").post(verifyUser,upload.fields([
     }
 ]),videoUpload);
 router.route("/delete").post(verifyUser,videoDelete)
-router.route("/update").post(verifyUser,videoUpdate)
+router.route("/update").post(verifyUser,upload.single("thumbnail"),videoUpdate)
 
 export default router

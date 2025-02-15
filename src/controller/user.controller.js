@@ -31,7 +31,6 @@ const userRegister=AsyncHandler(async(req, res)=>{
     const requiredFields = ["username", "fullname", "email", "ischannel", "password"]
     const checkReqBody = await verifyBody(req.body, requiredFields, 5, req.files);
 
-
     //access user info from req.body
     let  {fullname, username, email, password, ischannel}=req.body;
 
@@ -226,8 +225,8 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     if(!req.user) throw new ApiError(400, "unauthorized access")
 
     //make sure req.body is fine
-    const requiredFields =["fullname", "isChannel"]
-    const checkReqBody = await verifyBody(req.body, requiredFields);
+    const requiredFields =["fullname", "isChannel", "avatar", "coverImage"]
+    const checkReqBody = await verifyBody(req.body, requiredFields, null, req.files);
     
     //accessImages
     const avatarLocalPath= req.files?.avatar?.[0].path;
