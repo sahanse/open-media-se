@@ -7,6 +7,7 @@ import {comparePass} from "../utils/PasswordManager.js"
 
 //for normal routes where verification is must
 const verifyUser = AsyncHandler(async(req, _, next)=>{
+
    try {
      const accessToken= req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ","");
  

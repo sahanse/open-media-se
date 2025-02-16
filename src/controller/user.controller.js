@@ -225,7 +225,7 @@ const updateInfo=AsyncHandler(async(req, res)=>{
     if(!req.user) throw new ApiError(400, "unauthorized access")
 
     //make sure req.body is fine
-    const requiredFields =["fullname", "isChannel", "avatar", "coverImage"]
+    const requiredFields =["fullname", "isChannel", "avatar", "coverImage", "child_safe"]
     const checkReqBody = await verifyBody(req.body, requiredFields, null, req.files);
     
     //accessImages

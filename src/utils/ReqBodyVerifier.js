@@ -32,15 +32,17 @@ const verifyBody = async(body, checkData, checkLength=null, files={})=>{
 }
 
     //check any non required data available and they are not null
+
     for(let val in body){
         if(!checkData.includes(val)){
             removeFiles()
             throw new ApiError(400, `Unidentified field ${val}`)
-        } 
-        if(String(body[val]).trim() === ""){
-            removeFiles()
-            throw new ApiError(400, `Empty fields not allowed Got an empty field at ${val}`)
-        } 
+        } else if(val !== 'videoArray' && val !== 'preference'){
+            if(String(body[val]).trim() === ""){
+                removeFiles()
+                throw new ApiError(400, `Empty fields not allowed Got an empty field at ${val}`)
+            } 
+        }
     }
     
     return true

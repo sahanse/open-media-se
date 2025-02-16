@@ -6,12 +6,80 @@ import { deleteFromCloudinary, uploadOnCloudinary } from "../utils/Cloudinary.js
 import {createQuery, readQuery, updateQuery, deleteQuery} from "pgcrudify"
 import db from "../db/index.js"
 
+const getVideos = AsyncHandler(async (req, res) => {
+    //make sure req.body is fine
+    const requiredFields = ["videoLimit","preference","videoArray"];
+    const checkReqBody = await verifyBody(req.body, requiredFields);
 
-const getVideos= AsyncHandler(async(req, res)=>{
-    //get video counts how many result to send per request
-    //make sure if any userSpecific data is required like user specific videos 
-    //make sure if user needs any category wise videos 
-    //make sure user needs child safe videos or not 
+    //get required data from req.body
+    const limit = req.body.videoLimit || 20;
+    const child_safe = req.body.child_safe || true;
+
+   // Example videoArray containing IDs to exclude
+   const videoArray = req.body.videoArray || []; // These video IDs will be excluded from the results
+
+// Get user preferred categories from req.cookies.preference
+const preference = req.body.preference || []
+let filters = [`v.ispublic = true`, `v.child_safe = ${child_safe}`];
+
+// Only add category filter if preferences are present
+if (preference.length > 0) {
+    const formattedCategories = preference
+        .filter(cat => cat.trim() !== '')  // Filter out any empty strings
+        .map(cat => `'${cat}'`)
+        .join(', ');
+
+    if (formattedCategories) {
+        filters.push(`v.category IN (${formattedCategories})`);
+    }
+}
+
+// Exclude videos whose IDs are in videoArray
+if (videoArray.length > 0) {
+    filters.push(`v.id NOT IN (${videoArray.join(', ')})`);
+}
+
+// Join all filters with AND
+const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+// Final query
+const query = `SELECT 
+    v.id AS video_id, 
+    v.video_url, 
+    v.thumbnail_url, 
+    v.title, 
+    v.description, 
+    v.duration_type, 
+    v.created_at,
+    v.category, 
+    u.id AS uploader_id, 
+    u.username AS uploader,
+    COUNT(vi.id) AS views_count
+    FROM video v
+    JOIN users u ON v.user_id = u.id
+    LEFT JOIN views vi ON vi.video_id = v.id
+    ${whereClause}
+    GROUP BY v.id, u.id
+    ORDER BY RANDOM()
+    LIMIT ${limit};`;
+    
+
+    const getVideoDb = await db.query(query);
+    
+    const rowsCount = getVideoDb.rowCount;
+    const rows = getVideoDb.rows;
+    for(let val of rows){
+        videoArray.push(val.video_id);
+        console.log(val.category)
+    }
+
+    const data ={
+        videoData:rows,
+        videoArray
+    }    
+    return res
+    .status(200)
+    .json(new ApiResponse(200, data, "Video got successfully"))
 });
 
 const videoUpload= AsyncHandler(async(req, res)=>{
@@ -136,4 +204,4 @@ const videoDelete=AsyncHandler(async(req, res)=>{
     .json(new ApiResponse(200, {}, "video deleted successfully"))
 });
 
-export {videoUpload, getVideos, videoUpdate,videoDelete}
+export {videoUpload,  videoUpdate, videoDelete, getVideos}
