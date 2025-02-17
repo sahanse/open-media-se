@@ -15,13 +15,17 @@ import {verifyBody} from "../utils/ReqBodyVerifier.js"
 
 //user register
 const userRegister=AsyncHandler(async(req, res)=>{
+    const removeImageLocal=(avatarPath, coverPath)=>{
+    fs.unlinkSync(avatarPath);
+    fs.unlinkSync(coverPath)
+    }
+
     //access images from req.files
     const {avatar, coverImage}=req.files;
 
     //if user already logged in
     if(req.user){
-        if(avatar) fs.unlinkSync(avatar[0].path)
-        if(coverImage) fs.unlinkSync(coverImage[0].path)
+        removeImageLocal(avatar[0].path, coverImage[0].path)
         return res
         .status(200)
         .json(new ApiResponse(200, req.user, "user already logged-in to register logout first"))
@@ -44,29 +48,35 @@ const userRegister=AsyncHandler(async(req, res)=>{
     //make sure username doesent has any banned special character or emojis
     const notallowedSymbols = ["`", "~", "#", "^", "*", "(", ")", "{", "}", "[", "]", "/", ";", ":", "|", ",", "+", "="];
     for(let val of notallowedSymbols){
-        if(username.includes(val)) throw new ApiError(400, `Special character ${val} not allowed`)
+        if(username.includes(val)){
+            removeImageLocal(avatar[0].path, coverImage[0].path)
+        throw new ApiError(400, `Special character ${val} not allowed`);
+        }
     }
 
     // Regular expression to match emojis in username and email 
     const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{1FC00}-\u{1FFFD}]/u;
-    if (emojiRegex.test(username)) throw new ApiError(400, "emojis not username")
-    if (emojiRegex.test(email)) throw new ApiError(400, "emojis not email")
+    if (emojiRegex.test(username)){
+        removeImageLocal(avatar[0].path, coverImage[0].path)
+        throw new ApiError(400, "emojis not username")
+    }
+    if (emojiRegex.test(email)){
+        removeImageLocal(avatar[0].path, coverImage[0].path)
+        throw new ApiError(400, "emojis not email")
+    }
 
     //check weather username exist
     const usernameExist = await readQuery(db, "users", ['username'], {username});
 
     if(usernameExist.rowCount===1){
-        if(avatar) fs.unlinkSync(avatar[0].path)
-        if(coverImage) fs.unlinkSync(coverImage[0].path)
+        removeImageLocal(avatar[0].path, coverImage[0].path)
         throw new ApiError(400, "username already in use provide a new one")
     }
 
     //check email alreday exist
     const emailExist = await readQuery(db, "users",["email"],{email})
-
     if(emailExist.rowCount===1){
-        if(avatar) fs.unlinkSync(avatar.path)
-        if(coverImage) fs.unlinkSync(coverImage.path)
+        removeImageLocal(avatar[0].path, coverImage[0].path)
         throw new ApiError(400, "email alreday in use provide a new one")
     }
 
@@ -99,6 +109,10 @@ const userRegister=AsyncHandler(async(req, res)=>{
     //generate access and refreshtoken
     const generateTokens = await generateFullAuth(user, id)
     const {accessToken,refreshToken}=generateTokens;
+
+    //update refreshToken in user table;
+    const updateUserRefreshToken = await updateQuery(db, "users", {refreshtoken:refreshToken}, {id});
+    if(updateUserRefreshToken.rowCount === 0) throw new ApiError(400, "Internal server error")
 
     Object.keys(req.cookies).forEach(cookie => {
         res.clearCookie(cookie);
@@ -157,6 +171,10 @@ const userLogin=AsyncHandler(async(req, res)=>{
     //generate access and refreshtoken
     const generateTokens = await generateFullAuth(user, id)
     const {accessToken,refreshToken}=generateTokens;
+
+    //update the users refreshToken 
+    const updateRefreshToken = await updateQuery(db, "users", {refreshtoken:refreshToken}, {id});
+    if(updateRefreshToken.rowCount === 0) throw new ApiError(400, "internal server error");
     
     Object.keys(req.cookies).forEach(cookie => {
         res.clearCookie(cookie);
@@ -198,6 +216,10 @@ const refreshAccessToken=AsyncHandler(async(req, res)=>{
     //get user info from refreshtoken
     const userInfo = jwt.verify(refreshTokenCookie, process.env.REFREH_TOKEN_SECRET);
     const id=userInfo.id;
+
+    //verify stored refreshToken
+    const storedRefreshToken = await readQuery(db, "users", ["refreshtoken"], {id});
+    const verifyStoredRefreshToken = jwt.verify(storedRefreshToken.rows[0].refreshtoken, process.env.REFREH_TOKEN_SECRET);
 
     //check user exist
     const userExist= await readQuery(db, "users", ["id", "fullname", "username", "email"], {id});

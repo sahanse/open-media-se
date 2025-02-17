@@ -28,7 +28,6 @@ if (preference.length > 0) {
         .filter(cat => cat.trim() !== '')  // Filter out any empty strings
         .map(cat => `'${cat}'`)
         .join(', ');
-
     if (formattedCategories) {
         filters.push(`v.category IN (${formattedCategories})`);
     }
@@ -70,7 +69,6 @@ const query = `SELECT
     const rows = getVideoDb.rows;
     for(let val of rows){
         videoArray.push(val.video_id);
-        console.log(val.category)
     }
 
     const data ={
@@ -80,6 +78,70 @@ const query = `SELECT
     return res
     .status(200)
     .json(new ApiResponse(200, data, "Video got successfully"))
+});
+
+const searchVideos = AsyncHandler(async (req, res) => {
+    const requiredFields = ["searchTerm", "limit"];
+    const { searchTerm, limit } = req.body;
+    const checkReqBody = await verifyBody(req.body, requiredFields);
+
+    if (!checkReqBody) {
+        return res.status(400).json({ message: "Invalid request body" });
+    }
+
+    const searchValue = `%${searchTerm}%`;
+
+    // Query to search for the most relevant channels (up to 4)
+    const channelQuery = `
+        SELECT 
+            id AS user_id,
+            username,
+            avatar,
+            coverimage,
+            ischannel,
+            SIMILARITY(username, $1) AS relevance
+        FROM users
+        WHERE ischannel = true
+        AND SIMILARITY(username, $1) > 0.2
+        ORDER BY relevance DESC
+        LIMIT 4;
+    `;
+    const channelResult = await db.query(channelQuery, [searchTerm]);
+    const channels = channelResult.rows;
+
+    // Query to search for videos related to the search term
+    const videoQuery = `
+        SELECT 
+            v.id AS video_id, 
+            v.video_url, 
+            v.thumbnail_url, 
+            v.title, 
+            v.description, 
+            v.duration_type, 
+            v.created_at, 
+            u.id AS user_id, 
+            u.username AS uploader,
+            COUNT(vi.id) AS views
+        FROM video v
+        JOIN users u ON v.user_id = u.id
+        LEFT JOIN views vi ON vi.video_id = v.id
+        WHERE v.ispublic = true
+        AND (
+            v.title ILIKE $1 OR 
+            v.description ILIKE $1 OR 
+            v.category ILIKE $1
+        )
+        GROUP BY v.id, u.id
+        ORDER BY v.created_at DESC
+        LIMIT $2;
+    `;
+    const videoResult = await db.query(videoQuery, [searchValue, limit]);
+    const videos = videoResult.rows;
+
+    res.json({
+        channels: channels,   // Return the most relevant channels
+        videos: videos        // Return videos related to the search term
+    });
 });
 
 const videoUpload= AsyncHandler(async(req, res)=>{
@@ -204,4 +266,5 @@ const videoDelete=AsyncHandler(async(req, res)=>{
     .json(new ApiResponse(200, {}, "video deleted successfully"))
 });
 
-export {videoUpload,  videoUpdate, videoDelete, getVideos}
+
+export {videoUpload,  videoUpdate, videoDelete, getVideos, searchVideos}
