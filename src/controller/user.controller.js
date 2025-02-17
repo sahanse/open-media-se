@@ -43,7 +43,7 @@ const userRegister=AsyncHandler(async(req, res)=>{
     for(let val of username){
         if(val !== " ") validatedUserName += val;
     }
-    username = validatedUserName;
+    username = validatedUserName.toLowerCase()
 
     //make sure username doesent has any banned special character or emojis
     const notallowedSymbols = ["`", "~", "#", "^", "*", "(", ")", "{", "}", "[", "]", "/", ";", ":", "|", ",", "+", "="];

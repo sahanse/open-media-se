@@ -35,7 +35,7 @@ router.route("/logout").post(verifyUser,userLogout)
 
 router.route("/refresh-token").post(refreshAccessToken)
 
-router.route("/update-info").post(verifyUser,upload.fields([
+router.route("/update-info").patch(verifyUser,upload.fields([
     {
         name:"avatar",
         maxCount:1
@@ -46,7 +46,7 @@ router.route("/update-info").post(verifyUser,upload.fields([
     }
 ]),updateInfo)
 
-router.route("/update-sensitive").post(verifyUser,verifyPassword,updateSensitive)
+router.route("/update-sensitive").patch(verifyUser,verifyPassword,updateSensitive)
 
 router.route("/generate-otp").get(verifyUser,generateOtp)
 

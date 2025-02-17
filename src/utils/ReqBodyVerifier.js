@@ -2,7 +2,6 @@ import {ApiError} from "../utils/ApiError.js"
 import fs from "fs"
 
 const verifyBody = async(body, checkData, checkLength=null, files={})=>{
-
     const removeFiles =async()=>{
     const filesKeys=Object.keys(files);
     if(filesKeys.includes("avatar")){

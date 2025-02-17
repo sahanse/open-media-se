@@ -266,5 +266,4 @@ const videoDelete=AsyncHandler(async(req, res)=>{
     .json(new ApiResponse(200, {}, "video deleted successfully"))
 });
 
-
 export {videoUpload,  videoUpdate, videoDelete, getVideos, searchVideos}
