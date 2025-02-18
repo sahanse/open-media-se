@@ -2,10 +2,11 @@ import {AsyncHandler} from "../utils/AsyncHandler.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {createQuery, readQuery, updateQuery, deleteQuery} from "pgcrudify";
-import fs from "fs";
+import fs, { stat } from "fs";
 import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/Cloudinary.js";
 import {verifyBody} from "../utils/ReqBodyVerifier.js"
 import db from "../db/index.js"
+import { type } from "os";
 
 const createPost = AsyncHandler(async(req, res)=>{
     //make sure req.user is available
@@ -41,7 +42,7 @@ const createPost = AsyncHandler(async(req, res)=>{
     return res
     .status(200)
     .json(new ApiResponse(200, {id:savePost.rows[0].id}, "post created successFully"))
-})
+});
 
 const updatePost = AsyncHandler(async(req, res)=>{
     //make sure req.user is available
@@ -67,7 +68,7 @@ const updatePost = AsyncHandler(async(req, res)=>{
      return res
      .status(200)
      .json(new ApiResponse(200, {id}, "Data updated successfully"))
-})
+});
 
 const deletePost = AsyncHandler(async(req, res)=>{
     //make sure req.user is available
@@ -95,4 +96,10 @@ const deletePost = AsyncHandler(async(req, res)=>{
      .json(new ApiResponse(200, {id}, "post deleted successfully"))
 });
 
-export {createPost, updatePost, deletePost}
+const getPost = AsyncHandler(async(req, res)=>{
+});
+
+const searchPost = AsyncHandler(async(req, res)=>{
+});
+
+export {createPost, updatePost, deletePost, getPost, searchPost}
