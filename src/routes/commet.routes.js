@@ -7,6 +7,6 @@ const router = Router();
 router.route("/add").post(verifyUser, addComment);
 router.route("/update").patch(verifyUser, updateComment);
 router.route("/delete").delete(verifyUser, deleteComment);
-router.route("/get").get(verifyUser, getComment);
+router.route("/get").get(getComment);
 
 export default router;

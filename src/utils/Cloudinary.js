@@ -27,7 +27,7 @@ const uploadOnCloudinary = async (localFilePath) => {
     }
 
 
-}
+};
 
 const deleteFromCloudinary = async (filePath) => {
     const extractPublicId = (imageUrl) => {
