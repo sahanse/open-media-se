@@ -70,36 +70,151 @@ CREATE TABLE IF NOT EXISTS users (
     username varchar(255) NOT NULL UNIQUE,
     email varchar(255) NOT NULL UNIQUE,
     password text NOT NULL,
-    avatar text,
-    coverimage text,
+    avatar text DEFAULT null,
+    coverimage text DEFAULT null,
     ischannel boolean NOT NULL DEFAULT false,
+    verified boolean NOT NULL DEFAULT false,
     refreshtoken text DEFAULT null,
     createdat timestamptz DEFAULT now(),
     updatedat timestamptz DEFAULT now()
 );
 
+-- Create "users" table
+CREATE TABLE IF NOT EXISTS admin (
+    id serial PRIMARY KEY,
+    fullname varchar(255) NOT NULL,
+    register_number VARCHAR NOT NULL UNIQUE,
+    username varchar(255) NOT NULL UNIQUE,
+    email varchar(255) NOT NULL UNIQUE,
+    password text NOT NULL
+);
+
+-- Create "otp" table
+CREATE TABLE IF NOT EXISTS admin_otp (
+    id SERIAL PRIMARY KEY,
+    fullname varchar(255) NOT NULL,
+    register_number VARCHAR NOT NULL UNIQUE,
+    otp VARCHAR NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL,
+    expiry TIMESTAMPTZ NOT NULL
+);
+
+-- Create "topics" table
+CREATE TABLE IF NOT EXISTS category(
+    id serial PRIMARY KEY,
+    title varchar(100) NOT NULL UNIQUE,
+    description varchar(255),
+    child_safe boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
 -- Create "video" table
 CREATE TABLE IF NOT EXISTS video (
     id serial PRIMARY KEY,
     video_url text NOT NULL,
-    thumbnailurl text,
+    thumbnail_url text,
     title varchar(300) NOT NULL,
     description varchar(500) NOT NULL,
     ispublic boolean NOT NULL DEFAULT false,
+    duration_type varchar(10) NOT NULL,
+    child_safe boolean NOT NULL DEFAULT true,
+    category varchar(255),
     user_id bigint NOT NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT video_fk6 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    CONSTRAINT video_fk6 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT catgorypost_fk1 FOREIGN KEY (category) REFERENCES category(title) ON DELETE CASCADE
 );
 
--- Create "likes" table
-CREATE TABLE IF NOT EXISTS likes (
+-- Create "video_likes" table with composite unique constraint
+CREATE TABLE IF NOT EXISTS video_likes (
     id serial PRIMARY KEY,
     video_id bigint NOT NULL,
     user_id bigint NOT NULL,
+    -- Add composite unique constraint
+    CONSTRAINT unique_video_user UNIQUE (video_id, user_id),
+    -- Foreign keys
     CONSTRAINT likes_fk1 FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE,
     CONSTRAINT likes_fk2 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- Create "comments" table
+CREATE TABLE IF NOT EXISTS video_comments (
+    id serial PRIMARY KEY,
+    user_id bigint NOT NULL,
+    video_id bigint NOT NULL,
+    comment varchar(300) NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT comments_fk1 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT comments_fk2 FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE
+);
+
+-- Create "views" table
+CREATE TABLE IF NOT EXISTS video_views (
+    id serial PRIMARY KEY,
+    video_id bigint NOT NULL,
+    user_id bigint,  -- Can be NULL if user is not logged in
+    viewed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT views_fk_video FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE,
+    CONSTRAINT views_fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+
+-- Create "communitypost" table
+CREATE TABLE IF NOT EXISTS post (
+    id serial PRIMARY KEY,
+    image_array text[],
+    description varchar(255),
+    ispublic boolean NOT NULL DEFAULT false,
+    user_id bigint NOT NULL,
+    child_safe boolean NOT NULL DEFAULT true,
+    category varchar(255),
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT communitypost_fk4 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT catgorypost_fk1 FOREIGN KEY (category) REFERENCES category(title) ON DELETE CASCADE
+);
+
+
+-- Create "likes" table with composite unique constraint
+CREATE TABLE IF NOT EXISTS post_likes (
+    id serial PRIMARY KEY,
+    post_id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    -- Add composite unique constraint
+    CONSTRAINT unique_post_user UNIQUE (post_id, user_id),
+    -- Foreign keys
+    CONSTRAINT likes_fk1 FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
+    CONSTRAINT likes_fk2 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create "comments" table
+CREATE TABLE IF NOT EXISTS post_comments (
+    id serial PRIMARY KEY,
+    post_id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    comment text NOT NULL, 
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT comments_fk1 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT comments_fk2 FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE
+);
+
+-- Create "views" table
+CREATE TABLE IF NOT EXISTS post_views (
+    id serial PRIMARY KEY,
+    post_id bigint NOT NULL,
+    user_id bigint,  -- Can be NULL if user is not logged in
+    viewed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT views_fk_video FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
+    CONSTRAINT views_fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 
 -- Create "subscription" table
 CREATE TABLE IF NOT EXISTS subscription (
@@ -110,31 +225,8 @@ CREATE TABLE IF NOT EXISTS subscription (
     CONSTRAINT subscription_fk2 FOREIGN KEY (subscribedto_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Create "comments" table
-CREATE TABLE IF NOT EXISTS comments (
-    id serial PRIMARY KEY,
-    user_id bigint NOT NULL,
-    video_id bigint NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT comments_fk1 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT comments_fk2 FOREIGN KEY (video_id) REFERENCES video(id) ON DELETE CASCADE
-);
-
--- Create "communitypost" table
-CREATE TABLE IF NOT EXISTS communitypost (
-    id serial PRIMARY KEY,
-    post_image_url text,
-    description varchar(255),
-    ispublic boolean NOT NULL DEFAULT false,
-    user_id bigint NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT communitypost_fk4 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Create "playlist" table
-CREATE TABLE IF NOT EXISTS playlist (
+-- Create "saved" table
+CREATE TABLE IF NOT EXISTS saved_videos (
     id serial PRIMARY KEY,
     user_id bigint NOT NULL,
     video_id bigint NOT NULL,
@@ -156,14 +248,140 @@ CREATE TABLE IF NOT EXISTS otp (
 -- create "otpCounts" table
 CREATE TABLE IF NOT EXISTS otpcounts (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    otp_id INTEGER NOT NULL,
+    user_id bigint NOT NULL,
+    otp_id bigint NOT NULL,
     date TIMESTAMPTZ NOT NULL, 
     count INTEGER NOT NULL DEFAULT 0, -- Stores the number of OTPs requested
     CONSTRAINT otpCounts_fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT otpCounts_fk_otp FOREIGN KEY (otp_id) REFERENCES otp(id) ON DELETE CASCADE
 );
 
+
+-- Create trigger function for users.updatedat
+CREATE OR REPLACE FUNCTION update_users_modtime()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updatedat = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for users table
+CREATE TRIGGER update_users_updatedat
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION update_users_modtime();
+
+-- Create trigger function for video.updated_at
+CREATE OR REPLACE FUNCTION update_video_modtime()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for video table
+CREATE TRIGGER update_video_updated_at
+BEFORE UPDATE ON video
+FOR EACH ROW
+EXECUTE FUNCTION update_video_modtime();
+
+-- Create trigger function for video_comments.updated_at
+CREATE OR REPLACE FUNCTION update_video_comments_modtime()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for video_comments table
+CREATE TRIGGER update_video_comments_updated_at
+BEFORE UPDATE ON video_comments
+FOR EACH ROW
+EXECUTE FUNCTION update_video_comments_modtime();
+
+-- Create trigger function for post.updated_at
+CREATE OR REPLACE FUNCTION update_post_modtime()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for post table
+CREATE TRIGGER update_post_updated_at
+BEFORE UPDATE ON post
+FOR EACH ROW
+EXECUTE FUNCTION update_post_modtime();
+
+-- Create trigger function for post_comments.updated_at
+CREATE OR REPLACE FUNCTION update_post_comments_modtime()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for post_comments table
+CREATE TRIGGER update_post_comments_updated_at
+BEFORE UPDATE ON post_comments
+FOR EACH ROW
+EXECUTE FUNCTION update_post_comments_modtime();
+
+-- Create trigger function for category.updated_at
+CREATE OR REPLACE FUNCTION update_category_modtime()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for category table
+CREATE TRIGGER update_category_updated_at
+BEFORE UPDATE ON category
+FOR EACH ROW
+EXECUTE FUNCTION update_category_modtime(); 
+
+
+---create triiger to make sure only one user can make only 4 comment on a post
+CREATE OR REPLACE FUNCTION enforce_post_comment_limit()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (SELECT COUNT(*) FROM post_comments 
+        WHERE user_id = NEW.user_id AND post_id = NEW.post_id) >= 4 THEN
+        RAISE EXCEPTION 'Users can only post up to 4 comments per post.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER post_comment_limit_trigger
+BEFORE INSERT ON post_comments
+FOR EACH ROW EXECUTE FUNCTION enforce_post_comment_limit();
+
+---create trigger to make sure one user can make only 4 comment on a video
+CREATE OR REPLACE FUNCTION enforce_video_comment_limit()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (SELECT COUNT(*) FROM video_comments 
+        WHERE user_id = NEW.user_id AND video_id = NEW.video_id) >= 4 THEN
+        RAISE EXCEPTION 'Users can only post up to 4 comments per video.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER video_comment_limit_trigger
+BEFORE INSERT ON video_comments
+FOR EACH ROW EXECUTE FUNCTION enforce_video_comment_limit();
+
+--add pgterm extension
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 ```
 ## 5.Configure `.env` File
