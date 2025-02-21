@@ -1,12 +1,9 @@
 import {AsyncHandler} from "../utils/AsyncHandler.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
-import {createQuery, readQuery, updateQuery, deleteQuery} from "pgcrudify";
-import fs, { stat } from "fs";
-import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/Cloudinary.js";
+import {createQuery,updateQuery, deleteQuery} from "pgcrudify";
 import {verifyBody} from "../utils/ReqBodyVerifier.js"
 import db from "../db/index.js"
-import { type } from "os";
 
 const addComment = AsyncHandler(async(req, res)=>{
     //make sure user is verified

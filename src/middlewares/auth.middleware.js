@@ -20,7 +20,6 @@ const verifyUser = AsyncHandler(async(req, _, next)=>{
 
     //check user exist in db
     const id=userInfo.id
-
     const user= await readQuery(db, "users", ["id", "fullname", "username", "email"],{id});
     
     if(user.rowsCount===0){
@@ -130,4 +129,45 @@ const verifyPassword = AsyncHandler(async(req, _, next)=>{
     next()
 });
 
-export {verifyUser, verifyAuthRoute, verifyOtpToken, verifyPassword}
+const verifyView = AsyncHandler(async(req, _, next)=>{
+    let user= null;
+    if(req.cookies?.accessToken){
+        const accessToken = req.cookies.accessToken;
+        const verifyToken = await jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
+        user = verifyToken.id;
+
+    }
+
+    req.user =user;
+    next()
+
+});
+
+const verifySuperUser = AsyncHandler(async(req, _, next)=>{
+    
+   try {
+    const adminToken= req.cookies?.adminToken || req.header("Authorization")?.replace("Bearer ","");
+
+    if(!adminToken){
+        throw new ApiError(400, "unauthorized user")
+    }
+
+    //get info from accesstoken
+    const adminInfo=jwt.verify(adminToken, process.env.ACCESS_TOKEN_SECRET);
+
+   //check user exist in db
+   const id=adminInfo.id
+   const admin= await readQuery(db, "admin", ["id", "fullname", "username", "register_number"],{id});
+   
+   if(admin.rowsCount===0){
+       throw new ApiError(400, "unauthorized access");
+   }
+   req.admin=admin.rows[0];
+   next()
+  } catch (error) {
+   console.log("middlewares || auth.middleware || verifyUser || error",error);
+   throw new ApiError(401,error?.message || "invalid access token")
+  }
+});
+
+export {verifyUser, verifyAuthRoute, verifyOtpToken, verifyPassword, verifyView, verifySuperUser}

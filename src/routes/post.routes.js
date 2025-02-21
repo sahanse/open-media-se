@@ -8,7 +8,7 @@ const router = Router();
 router.route("/createPost").post(verifyUser,upload.array('images', 10),createPost);
 router.route("/deletePost").delete(verifyUser, deletePost);
 router.route("/updatePost").patch(verifyUser, updatePost);
-router.route("/get-post").get(verifyUser, getPost);
+router.route("/getPosts").get(getPost);
 router.route("/search-post").get(verifyUser, searchPost);
 
 export default router;

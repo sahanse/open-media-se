@@ -8,7 +8,7 @@ import db from "../db/index.js"
 
 const getVideos = AsyncHandler(async (req, res) => {
     //make sure req.body is fine
-    const requiredFields = ["videoLimit","preference","videoArray"];
+    const requiredFields = ["videoLimit","preference","videoArray", "child_safe"];
     const checkReqBody = await verifyBody(req.body, requiredFields);
 
     //get required data from req.body
@@ -56,7 +56,7 @@ const query = `SELECT
     COUNT(vi.id) AS views_count
     FROM video v
     JOIN users u ON v.user_id = u.id
-    LEFT JOIN views vi ON vi.video_id = v.id
+    LEFT JOIN video_views vi ON vi.video_id = v.id
     ${whereClause}
     GROUP BY v.id, u.id
     ORDER BY RANDOM()
@@ -124,7 +124,7 @@ const searchVideos = AsyncHandler(async (req, res) => {
             COUNT(vi.id) AS views
         FROM video v
         JOIN users u ON v.user_id = u.id
-        LEFT JOIN views vi ON vi.video_id = v.id
+        LEFT JOIN video_views vi ON vi.video_id = v.id
         WHERE v.ispublic = true
         AND (
             v.title ILIKE $1 OR 
