@@ -105,16 +105,7 @@ npm run dev
 Below is the link of posman collection consisting all endpoints:-
 
 collection link:-https://asset.cloudinary.com/dsdksm8pj/d330115ca801dc4b4a1c3c21474cc996
-```
 
-## License
-
-```markdown
-## License
-
-This project is licensed under the [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) with an additional **non-commercial use clause**. Commercial use is only permitted if the resulting work remains open-source and licensed under the same AGPL terms.
-
-```
 
 ## Contributing
 
@@ -137,3 +128,5 @@ For any questions, feel free to open an issue or contact the maintainers at saha
 - [PostgreSQL](https://www.postgresql.org/)
 - [Cloudinary](https://cloudinary.com/)
 
+### License
+MIT License
