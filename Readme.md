@@ -5,10 +5,10 @@ This is an open-source backend solution for building a media platform like YouTu
 
 - **Video Upload and Storage**: Upload and store video files on Cloudinary.
 - **Image Storage**: Store images (thumbnails, profile pictures, etc.) on Cloudinary.
-- **Database Integration**: Uses PostgreSQL to manage video metadata (titles, descriptions, views, likes, etc.).
+- **Database Integration**: Uses PostgreSQL to manage video metadata.
 - **User Authentication**: Supports user registration, login, using JWT.
-- **Video Streaming**: Enables video streaming.
-- **CRUD Operations for Media**: Create, Read, Update, and Delete (CRUD) functionality for video management.
+- **Otp and Email based Authentication**: Otp and email based authentication for password reset.
+- **Admin controllers**: Configured controllers for admin for secured management.
 - **Scalable Architecture**: Built with scalability in mind to support high traffic and easy expansion.
 ## Tech Stack
 
@@ -17,7 +17,6 @@ This is an open-source backend solution for building a media platform like YouTu
 - **PostgreSQL**: Relational database to store user and video data.
 - **Cloudinary**: Cloud storage service for managing and serving media files (images and videos).
 - **JWT/Session Authentication**: Secure authentication for user management.
-- **Video Streaming**: Supports multiple video formats and resolutions for smooth playback.
 ## Installation and Setup
 
 To get started with the project, follow these steps:
