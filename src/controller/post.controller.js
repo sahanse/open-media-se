@@ -126,8 +126,8 @@ const getPost = AsyncHandler(async (req, res) => {
     // Construct WHERE clause
     const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
 
-    // Final query (Preventing SQL Injection)
-    const query =`
+    // Final query with likes and comments count
+    const query = `
     SELECT 
         p.id AS post_id, 
         p.image_array, 
@@ -135,10 +135,14 @@ const getPost = AsyncHandler(async (req, res) => {
         p.created_at, 
         u.id AS uploader_id, 
         u.username AS uploader,
-        COUNT(pi.id) AS views_count
+        COUNT(DISTINCT pi.id) AS views_count,
+        COUNT(DISTINCT pl.id) AS likes_count,
+        COUNT(DISTINCT pc.id) AS comments_count
     FROM post p
     JOIN users u ON p.user_id = u.id
-    LEFT JOIN post_views pi ON pi.post_id = p.id  -- FIXED HERE
+    LEFT JOIN post_views pi ON pi.post_id = p.id
+    LEFT JOIN post_likes pl ON pl.post_id = p.id
+    LEFT JOIN post_comments pc ON pc.post_id = p.id
     ${whereClause}
     GROUP BY p.id, u.id
     ORDER BY RANDOM()
@@ -163,7 +167,76 @@ const getPost = AsyncHandler(async (req, res) => {
     );
 });
 
-const searchPost = AsyncHandler(async(req, res)=>{
+const searchPost = AsyncHandler(async (req, res) => {
+    // Ensure req.body is valid
+    const requiredFields = ["searchTerm", "limit", "postArray", "child_safe"];
+    const checkReqBody = await verifyBody(req.body, requiredFields);
+
+    // Extract required data from req.body
+    const limit = req.body.limit || 20;
+    const child_safe = req.body.child_safe || true;
+    const searchTerm = `%${req.body.searchTerm}%`;
+    const postArray = req.body.postArray || []; // Exclude these post IDs
+    const preference = req.body.preference || [];
+
+    let filters = [`p.ispublic = true`, `p.child_safe = $1`];
+    let queryParams = [child_safe];
+    let paramIndex = 2;
+
+    // Apply category filter if preferences exist
+    if (preference.length > 0) {
+        filters.push(`p.category_id = ANY($${paramIndex})`);
+        queryParams.push(preference);
+        paramIndex++;
+    }
+
+    // Exclude posts in postArray
+    if (postArray.length > 0) {
+        filters.push(`p.id <> ALL($${paramIndex})`);
+        queryParams.push(postArray);
+        paramIndex++;
+    }
+
+    // Combine filters
+    const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+
+    // Query with correct category reference
+    const query = `
+    SELECT 
+        p.id AS post_id, 
+        p.image_array, 
+        p.description, 
+        p.created_at, 
+        p.category_id, 
+        c.title AS category_name,
+        u.id AS uploader_id, 
+        u.username AS uploader,
+        COUNT(DISTINCT pv.id) AS views_count,
+        COUNT(DISTINCT pl.id) AS likes_count,
+        COUNT(DISTINCT pc.id) AS comments_count
+    FROM post p
+    JOIN users u ON p.user_id = u.id
+    LEFT JOIN category c ON p.category_id = c.id
+    LEFT JOIN post_views pv ON pv.post_id = p.id
+    LEFT JOIN post_likes pl ON pl.post_id = p.id
+    LEFT JOIN post_comments pc ON pc.post_id = p.id
+    ${whereClause}
+    GROUP BY p.id, u.id, c.id
+    ORDER BY RANDOM()
+    LIMIT $${paramIndex};`;
+
+    queryParams.push(limit);
+
+    const getPostDb = await db.query(query, queryParams);
+    const rows = getPostDb.rows;
+
+    for (let val of rows) {
+        postArray.push(val.post_id);
+    }
+
+    const data = { postData: rows, postArray };
+
+    return res.status(200).json(new ApiResponse(200, data, "Posts retrieved successfully"));
 });
 
 export {createPost, updatePost, deletePost, getPost, searchPost}

@@ -23,6 +23,9 @@ import commentRoutes from "./routes/commet.routes.js"
 import viewsRoutes from "./routes/views.routes.js"
 import categoryRoutes from "./routes/category.routes.js"
 import adminRoutes from "./routes/admin.routes.js"
+import saveVideoRoutes from "./routes/savedVideo.routes.js"
+import savedPostRoutes from "./routes/savedPost.routes.js"
+import playListRoutes from "./routes/playList.routes.js"
 
 //routes declaration
 app.use("/api/v1/users", userRoutes)
@@ -33,5 +36,8 @@ app.use("/api/v1/comment", commentRoutes)
 app.use("/api/v1/views",viewsRoutes)
 app.use("/api/v1/category", categoryRoutes)
 app.use("/api/v1/admin", adminRoutes)
+app.use("/api/v1/savedVideos", saveVideoRoutes)
+app.use("/api/v1/playList", playListRoutes)
+app.use("/api/v1/savedPost", savedPostRoutes)
 
 export default app

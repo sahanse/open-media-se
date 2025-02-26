@@ -9,6 +9,6 @@ router.route("/createPost").post(verifyUser,upload.array('images', 10),createPos
 router.route("/deletePost").delete(verifyUser, deletePost);
 router.route("/updatePost").patch(verifyUser, updatePost);
 router.route("/getPosts").get(getPost);
-router.route("/search-post").get(verifyUser, searchPost);
+router.route("/search-post").get(searchPost);
 
 export default router;

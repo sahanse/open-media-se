@@ -96,47 +96,71 @@ const deleteComment = AsyncHandler(async(req, res)=>{
     .json(new ApiResponse(200, {id}, "successfully deleted"))
 });
 
-const getComment = AsyncHandler(async(req, res)=>{
-    //make sure req.body is fine
-    const requiredFields = ["type","id"];
-    const checkReqBody = await verifyBody(req.body, requiredFields, 2);
+const getComment = AsyncHandler(async (req, res) => {
+    // Validate request body
+    const requiredFields = ["type", "id", "limit", "commentArray"];
+    const checkReqBody = await verifyBody(req.body, requiredFields);
 
-    const id = req.body.id;
-    const type = req.body.type;
+    const { type, id, limit, commentArray = [] } = req.body;
+    let query, queryParams;
+    let returnData = {};
 
-    const returnData = {};
-    if(type === "post"){
-    const getComment = await db.query(`SELECT 
-    pc.id, 
-    pc.comment, 
-    pc.user_id, 
-    u.username, 
-    u.avatar
-    FROM post_comments pc
-    INNER JOIN users u ON pc.user_id = u.id
-    WHERE pc.post_id = ${id};
+    // Ensure ID is a valid number
+    if (isNaN(id)) {
+        throw new ApiError(400, "Invalid ID provided");
+    }
 
-`)
-  if(getComment.rowCount===0) throw new ApiError(400, "something went wrong make sure all provided datas are correct")
-  returnData.comments = getComment.rows;
- }else if(type === "video"){
-    const getComment =await db.query(`SELECT 
-    vc.id, 
-    vc.comment, 
-    vc.user_id, 
-    u.username, 
-    u.avatar
-    FROM video_comments vc
-    INNER JOIN users u ON vc.user_id = u.id
-    WHERE vc.video_id = ${id};
-    `)
-    if(getComment.rowCount===0) throw new ApiError(400, "something went wrong make sure all provided datas are correct")
-    returnData.comments = getComment.rows;
-  }
+    if (type === "post") {
+        query = `
+        SELECT 
+            pc.id AS comment_id, 
+            pc.comment, 
+            pc.user_id, 
+            pc.created_at,
+            u.username, 
+            u.avatar
+        FROM post_comments pc
+        INNER JOIN users u ON pc.user_id = u.id
+        WHERE pc.post_id = $1
+        ${commentArray.length > 0 ? `AND pc.id NOT IN (${commentArray.map((_, i) => `$${i + 2}`).join(", ")})` : ""}
+        ORDER BY pc.created_at DESC
+        LIMIT $${commentArray.length + 2};
+        `;
 
-  return res
-  .status(200)
-  .json(new ApiResponse(200, returnData, "success"))
+        queryParams = [id, ...commentArray, limit];
+
+    } else if (type === "video") {
+        query = `
+        SELECT 
+            vc.id AS comment_id, 
+            vc.comment, 
+            vc.user_id, 
+            vc.created_at,
+            u.username, 
+            u.avatar
+        FROM video_comments vc
+        INNER JOIN users u ON vc.user_id = u.id
+        WHERE vc.video_id = $1
+        ${commentArray.length > 0 ? `AND vc.id NOT IN (${commentArray.map((_, i) => `$${i + 2}`).join(", ")})` : ""}
+        ORDER BY vc.created_at DESC
+        LIMIT $${commentArray.length + 2};
+        `;
+
+        queryParams = [id, ...commentArray, limit];
+    } else {
+        throw new ApiError(400, "Invalid type. Allowed values: post, video");
+    }
+
+    // Execute query
+    const getCommentDb = await db.query(query, queryParams);
+
+    // Return an empty array instead of throwing an error
+    returnData.comments = getCommentDb.rows;
+
+    // Update commentArray with fetched comments
+    returnData.commentArray = [...commentArray, ...getCommentDb.rows.map(c => c.comment_id)];
+
+    return res.status(200).json(new ApiResponse(200, returnData, "Comments retrieved successfully"));
 });
 
 export {addComment, updateComment, deleteComment, getComment}

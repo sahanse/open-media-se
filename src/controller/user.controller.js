@@ -13,179 +13,150 @@ import {mailSender} from "../utils/Email.js"
 import {options} from "../utils/Constants.js"
 import {verifyBody} from "../utils/ReqBodyVerifier.js"
 
-//user register
-const userRegister=AsyncHandler(async(req, res)=>{
-    const removeImageLocal=(avatarPath, coverPath)=>{
-    fs.unlinkSync(avatarPath);
-    fs.unlinkSync(coverPath)
+//registerning the 
+const userRegister = AsyncHandler(async (req, res) => {
+    // Function to remove uploaded images if an error occurs
+    const removeImageLocal = (avatarPath, coverPath) => {
+        if (avatarPath) fs.unlinkSync(avatarPath);
+        if (coverPath) fs.unlinkSync(coverPath);
+    };
+
+    // Access images from req.files
+    const { avatar, coverImage } = req.files;
+
+    // If user is already logged in, prevent registration
+    if (req.user) {
+        removeImageLocal(avatar?.[0]?.path, coverImage?.[0]?.path);
+        return res.status(200).json(new ApiResponse(200, req.user, "User already logged in. Please log out first."));
     }
 
-    //access images from req.files
-    const {avatar, coverImage}=req.files;
-
-    //if user already logged in
-    if(req.user){
-        removeImageLocal(avatar[0].path, coverImage[0].path)
-        return res
-        .status(200)
-        .json(new ApiResponse(200, req.user, "user already logged-in to register logout first"))
-    }
-    
-    //make sure req.body is fine
-    const requiredFields = ["username", "fullname", "email", "ischannel", "password"]
-    const checkReqBody = await verifyBody(req.body, requiredFields, 5, req.files);
-
-    //access user info from req.body
-    let  {fullname, username, email, password, ischannel}=req.body;
-
-    //remove all white spaces from username and validate it
-    let validatedUserName="";
-    for(let val of username){
-        if(val !== " ") validatedUserName += val;
-    }
-    username = validatedUserName.toLowerCase()
-
-    //make sure username doesent has any banned special character or emojis
-    const notallowedSymbols = ["`", "~", "#", "^", "*", "(", ")", "{", "}", "[", "]", "/", ";", ":", "|", ",", "+", "="];
-    for(let val of notallowedSymbols){
-        if(username.includes(val)){
-            removeImageLocal(avatar[0].path, coverImage[0].path)
-        throw new ApiError(400, `Special character ${val} not allowed`);
-        }
+    // Validate request body
+    const requiredFields = ["username", "fullname", "email", "ischannel", "password"];
+    if (!(await verifyBody(req.body, requiredFields, 5, req.files))) {
+        removeImageLocal(avatar?.[0]?.path, coverImage?.[0]?.path);
+        throw new ApiError(400, "Invalid request body");
     }
 
-    // Regular expression to match emojis in username and email 
-    const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{1FC00}-\u{1FFFD}]/u;
-    if (emojiRegex.test(username)){
-        removeImageLocal(avatar[0].path, coverImage[0].path)
-        throw new ApiError(400, "emojis not username")
-    }
-    if (emojiRegex.test(email)){
-        removeImageLocal(avatar[0].path, coverImage[0].path)
-        throw new ApiError(400, "emojis not email")
-    }
+    // Extract user details
+    let { fullname, username, email, password, ischannel } = req.body;
 
-    //check weather username exist
-    const usernameExist = await readQuery(db, "users", ['username'], {username});
+    // Clean and validate username
+    username = username.replace(/\s+/g, "").toLowerCase(); // Remove spaces and convert to lowercase
 
-    if(usernameExist.rowCount===1){
-        removeImageLocal(avatar[0].path, coverImage[0].path)
-        throw new ApiError(400, "username already in use provide a new one")
+    const notAllowedSymbols = /[`~#^*(){}[\]/;:|,+=]/g; // Regex for special characters
+    if (notAllowedSymbols.test(username)) {
+        removeImageLocal(avatar?.[0]?.path, coverImage?.[0]?.path);
+        throw new ApiError(400, "Username contains invalid characters.");
     }
 
-    //check email alreday exist
-    const emailExist = await readQuery(db, "users",["email"],{email})
-    if(emailExist.rowCount===1){
-        removeImageLocal(avatar[0].path, coverImage[0].path)
-        throw new ApiError(400, "email alreday in use provide a new one")
+    const emojiRegex = /[\u{1F600}-\u{1FFFD}]/u; // Emoji regex
+    if (emojiRegex.test(username) || emojiRegex.test(email)) {
+        removeImageLocal(avatar?.[0]?.path, coverImage?.[0]?.path);
+        throw new ApiError(400, "Emojis are not allowed in username or email.");
     }
 
-    //if avatar available upload on cloudinary
-    let avatarCloudinary=null;
-    if(avatar) avatarCloudinary= await uploadOnCloudinary(avatar[0].path)
-    
-    //if cover image available upload on cloudinary
-    let coverImageCloudinary=null;
-    if(coverImage) coverImageCloudinary= await uploadOnCloudinary(coverImage[0].path)
-    
-    //hash the password
-    const hashedPass= await hashPass(password);
+    // Check if username OR email already exists in one query
+    const userExistQuery = `SELECT username, email FROM users WHERE username = $1 OR email = $2`;
+    const userExist = await db.query(userExistQuery, [username, email]);
 
-    //save user into databse
-    const addUser = await createQuery(db, "users", {fullname, username, email, password:hashedPass, avatar:avatarCloudinary?.url || null, coverimage:coverImageCloudinary?.url || null, ischannel}, ["id"])
+    if (userExist.rowCount > 0) {
+        removeImageLocal(avatar?.[0]?.path, coverImage?.[0]?.path);
+        const existingUser = userExist.rows[0];
+        throw new ApiError(400, existingUser.username === username ? "Username already in use." : "Email already in use.");
+    }
 
-    //extract id of user
-    const id=addUser.rows[0].id;
+    // Upload avatar and cover image to cloudinary if available
+    const avatarCloudinary = avatar ? await uploadOnCloudinary(avatar[0].path) : null;
+    const coverImageCloudinary = coverImage ? await uploadOnCloudinary(coverImage[0].path) : null;
 
-    const user={
-        id,
+    // Hash the password
+    const hashedPass = await hashPass(password);
+
+    // Insert new user into the database
+    const addUser = await createQuery(db, "users", {
         fullname,
         username,
         email,
-        avatar:avatarCloudinary?.url || null,
-        coverImage:coverImageCloudinary?.url || null
-    }
+        password: hashedPass,
+        avatar: avatarCloudinary?.url || null,
+        coverimage: coverImageCloudinary?.url || null,
+        ischannel,
+    }, ["id"]);
 
-    //generate access and refreshtoken
-    const generateTokens = await generateFullAuth(user, id)
-    const {accessToken,refreshToken}=generateTokens;
+    if (!addUser.rowCount) throw new ApiError(500, "Internal server error while creating user.");
 
-    //update refreshToken in user table;
-    const updateUserRefreshToken = await updateQuery(db, "users", {refreshtoken:refreshToken}, {id});
-    if(updateUserRefreshToken.rowCount === 0) throw new ApiError(400, "Internal server error")
+    // Extract user ID
+    const id = addUser.rows[0].id;
+    const user = { id, fullname, username, email, avatar: avatarCloudinary?.url || null, coverImage: coverImageCloudinary?.url || null };
 
-    Object.keys(req.cookies).forEach(cookie => {
-        res.clearCookie(cookie);
-    });
+    // Generate authentication tokens
+    const { accessToken, refreshToken } = await generateFullAuth(user, id);
 
-    return res
-    .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
-    .json(new ApiResponse(200, {user, accessToken, refreshToken}, "user registered successfully"))
+    // Update refreshToken in user table
+    const updateUserRefreshToken = await updateQuery(db, "users", { refreshtoken: refreshToken }, { id });
+    if (!updateUserRefreshToken.rowCount) throw new ApiError(500, "Failed to update refresh token.");
+
+    // Clear existing cookies and set new tokens
+    Object.keys(req.cookies).forEach((cookie) => res.clearCookie(cookie));
+
+    return res.status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(new ApiResponse(200, { user, accessToken, refreshToken }, "User registered successfully"));
 });
 
 //user login
-const userLogin=AsyncHandler(async(req, res)=>{
-    //if user alreday logged in
-   if(req.user){
-    return res.
-    status(200)
-    .json(new ApiResponse(200, req.user, "user already logged in"))
-   } 
-   
-    //make sure req.body is fine
-    const requiredFields =["username", "email", "password"]
-    const checkReqBody = await verifyBody(req.body, requiredFields, 2);
-
-   //make sure that password is available;
-   if(!req.body.password) throw new ApiError(400, "password is required")
-
-    //check if user exists
-    let userExist=null;
-    if(req.body.email){
-       userExist= await readQuery(db, "users", ["id","fullname","username","email","password"], {email:req.body.email});
-    }else{
-       userExist=await readQuery(db, "users",["id","fullname","username","email","password"], {username:req.body.username})
+const userLogin = AsyncHandler(async (req, res) => {
+    // If user is already logged in, return early
+    if (req.user) {
+        return res.status(200).json(new ApiResponse(200, req.user, "User already logged in"));
     }
 
-    if(userExist.rowCount===0) throw new ApiError(400, "user not found")
-    
-    //check for password match
-    const savedPass= userExist.rows[0].password
-    
-    //compare the password
-    const passwordMatched= await comparePass(req.body.password, savedPass);
-    
-    if(!passwordMatched) throw new ApiError(400, "Wrong password")
-    
-    const user={
-        id:userExist.rows[0].id,
-        fullname:userExist.rows[0].fullname,
-        username:userExist.rows[0].username,
-        email:userExist.rows[0].email,
+    // Validate request body
+    const requiredFields = ["username", "email", "password"];
+    if (!(await verifyBody(req.body, requiredFields, 2))) {
+        throw new ApiError(400, "Invalid request body");
     }
 
-    const id=user.id;
+    const { email, username, password } = req.body;
 
-    //generate access and refreshtoken
-    const generateTokens = await generateFullAuth(user, id)
-    const {accessToken,refreshToken}=generateTokens;
+    if (!password) throw new ApiError(400, "Password is required");
 
-    //update the users refreshToken 
-    const updateRefreshToken = await updateQuery(db, "users", {refreshtoken:refreshToken}, {id});
-    if(updateRefreshToken.rowCount === 0) throw new ApiError(400, "internal server error");
-    
-    Object.keys(req.cookies).forEach(cookie => {
-        res.clearCookie(cookie);
-    });
+    // Single query to check user existence (by email or username)
+    const userExistQuery = `
+        SELECT id, fullname, username, email, password FROM users 
+        WHERE email = $1 OR username = $2 LIMIT 1
+    `;
+    const userExist = await db.query(userExistQuery, [email, username]);
+
+    if (userExist.rowCount === 0) throw new ApiError(400, "User not found");
+
+    // Extract user data
+    const { id, fullname, username: dbUsername, email: dbEmail, password: savedPass } = userExist.rows[0];
+
+    // Compare passwords
+    if (!(await comparePass(password, savedPass))) {
+        throw new ApiError(400, "Wrong password");
+    }
+
+    // Create user object
+    const user = { id, fullname, username: dbUsername, email: dbEmail };
+
+    // Generate access and refresh tokens
+    const { accessToken, refreshToken } = await generateFullAuth(user, id);
+
+    // Update refresh token in the database
+    const updateRefreshToken = await updateQuery(db, "users", { refreshtoken: refreshToken }, { id });
+    if (!updateRefreshToken.rowCount) throw new ApiError(500, "Failed to update refresh token");
+
+    // Clear existing cookies
+    Object.keys(req.cookies).forEach((cookie) => res.clearCookie(cookie));
 
     return res
-    .status(200)
-    .cookie("accessToken", accessToken,options)
-    .cookie("refreshToken", refreshToken, options)
-    .json(new ApiResponse(200, {user, accessToken, refreshToken}, "user login successfull"))
-
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(new ApiResponse(200, { user, accessToken, refreshToken }, "User login successful"));
 });
 
 //user logout

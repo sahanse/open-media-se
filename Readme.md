@@ -110,8 +110,6 @@ CREATE TABLE IF NOT EXISTS category(
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
-
 -- Create "video" table
 CREATE TABLE IF NOT EXISTS video (
     id serial PRIMARY KEY,
@@ -382,7 +380,6 @@ FOR EACH ROW EXECUTE FUNCTION enforce_video_comment_limit();
 
 --add pgterm extension
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
 ```
 ## 5.Configure `.env` File
 
